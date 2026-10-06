@@ -216,3 +216,38 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 - [ ] 대표가 `https://deockhyeon-hub.github.io/program_trans/preview/` 확인 → 승인되면 preview 를 본 화면으로 옮기고(경로 `../` 정리, sw 캐시 v9) `preview/` 삭제
 - [ ] design 채팅이 `trans/target` 브랜치 합치기 (합친 뒤 apply 가 `css/design.css` 를 관리)
 - [ ] design 에 어두운 테마가 생기면 앱의 어두운 토큰 블록을 지우고 그쪽으로
+
+### 6 · 10-06 17:40 — 공통 디자인을 본 화면에 반영 (대표 승인 「바꿔줘」)
+
+5번의 시험 화면(`preview/`)을 그대로 본 화면으로 옮기고 `preview/` 는 지웠다.
+
+**한 일**
+
+- `preview/` 의 `index.html` · `css/design.css` · `css/styles.css` · `js/app.js` · `js/theme-boot.js` → 저장소 맨 위로.
+  나머지 js(api · store · translator · images)는 해시를 비교해 같음을 확인한 뒤 그대로 둠 — 시험 화면을 만든 뒤 누가 본 앱을 고치지 않았다는 확인.
+- `index.html` 의 `../fonts/` · `../icons/` · `../manifest.webmanifest` 경로를 맨 위 기준으로 고침 (남은 `../` 0).
+- `sw.js` 캐시 `biztr-shell-v9`, 미리 받는 목록에 `css/design.css` 추가.
+- `manifest.webmanifest` 바탕색 #FFFFFF · 테마색 #FBFBFC (메뉴 바탕과 같게 — 휴대폰 상단 막대 색).
+- 이제 `css/design.css` 가 실제 자리에 있으므로 design 의 `apply.py` 가 이 파일을 관리한다 (design 채팅에 알림).
+
+**확인한 수치**
+
+| 항목 | 결과 |
+|---|---|
+| `apply.py --check --only trans` (실제 저장소) | 「모든 프로그램이 design 과 같음」 |
+| `audit.py --only trans` | 19개 검사 모두 0 |
+| 배포 | push 후 10초 만에 `biztr-shell-v9`, `/preview/` 는 404 |
+| 본 화면 | `css/design.css` 연결 · Pretendard · 메뉴 바탕 #FBFBFC · 채팅방 2 · 메시지 161 · 가로 1440 = 1440 |
+| 실제 번역 시험 | 영어 방 「견적서 검토 부탁드립니다.」 → 「번역 중」 알약 → 「Could you please review the quotation?」 + 복사 · 다시 번역 · 삭제 아이콘. 시험 메시지는 지움(30 → 30) |
+
+**밟은 함정**
+
+- 휴대폰에 설치한 앱은 서비스 워커 캐시 때문에 한두 번 다시 열어야 새 모양이 된다(v9 로 올려서 옛 캐시는 지워짐).
+- design 쪽 `trans/target` 브랜치는 아직 design 채팅이 합치기 전. 합치기 전에는 design 이 색을 바꿔도 번역 앱에 자동으로 안 온다.
+  워크트리 `C:\Users\duckh\projects\design.worktrees\trans` 는 합친 뒤 지워도 된다.
+
+**다음에 할 것**
+
+- [ ] design 채팅이 `trans/target` 합치기 → 그 뒤로 디자인 바뀜은 apply 로 같이 반영
+- [ ] 휴대폰에서 새 모양 · 어둡게 · 크게 확인
+- [ ] design 에 어두운 테마가 생기면 앱의 어두운 토큰 블록을 지우고 그쪽으로
