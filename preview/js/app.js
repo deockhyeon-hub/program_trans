@@ -180,6 +180,8 @@ function renderMe() {
   tag.className = `ds-who w${hashIndex(user.email || name, 16)}`;
   tag.title = user.email || name;
   $("me-role").textContent = user.role === "admin" ? "관리자" : "직원";
+  // 접힌 메뉴에서는 아이콘만 보이므로 이름을 풍선으로
+  $("me-ico").parentElement.title = `${name} · ${$("me-role").textContent}`;
 }
 
 function renderHead() {

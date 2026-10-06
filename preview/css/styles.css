@@ -96,7 +96,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tr-hint{margin:0;font-size:var(--ds-fs-13);line-height:var(--ds-lh-body);color:var(--ds-fg-neutral-subtle)}
 .tr-stack{display:flex;flex-direction:column;gap:var(--ds-sp-3)}
 .tr-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--ds-sp-2)}
-.tr-grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--ds-sp-3)}
 .tr-block{width:100%}
 .tr-w96{flex:0 0 96px}
 .ds-field em{font-style:normal;font-weight:var(--ds-fw-regular);color:var(--ds-fg-neutral-subtle)}
@@ -136,13 +135,16 @@ textarea.ds-input{min-height:0;resize:vertical}
 .tr-nav__me{display:flex;align-items:center;gap:2px;margin-top:var(--ds-sp-2);padding:var(--ds-sp-2) 0 0 6px;border-top:1px solid var(--ds-stroke-neutral)}
 .tr-me{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
 .tr-me .ds-who{max-width:120px}
+.tr-me__ico{display:none}
 .tr-me__role{font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle);white-space:nowrap}
 
 /* 메뉴 접기 (폭 60 · 아이콘만, 이름은 풍선) — 1000px 이하에서는 접힌 채 시작 */
 @media (min-width:701px){
   .tr-app.mini{grid-template-columns:var(--ds-nav-w-mini) minmax(0,1fr)}
   .tr-app.mini .tr-nav{padding-left:var(--ds-sp-2);padding-right:var(--ds-sp-2);align-items:center}
-  .tr-app.mini .tr-nav__lb,.tr-app.mini .tr-room__txt,.tr-app.mini .tr-me,.tr-app.mini .tr-hide-mini{display:none}
+  .tr-app.mini .tr-nav__lb,.tr-app.mini .tr-room__txt,.tr-app.mini .tr-me .ds-who,.tr-app.mini .tr-me__role{display:none}
+  .tr-app.mini .tr-me{flex:none;justify-content:center}
+  .tr-app.mini .tr-me__ico{display:inline-flex}   /* 접힌 메뉴: 내 계정은 아이콘만, 이름은 풍선 */
   .tr-app.mini .tr-nav__top{flex-direction:column;height:auto;gap:var(--ds-sp-2);padding:0}
   .tr-app.mini .tr-nav__top .tr-brand{flex:none}
   .tr-app.mini .tr-newroom{width:36px;padding:0;justify-content:center}
@@ -285,6 +287,5 @@ textarea.ds-input{min-height:0;resize:vertical}
   .tr-head .acts .ds-btn{height:var(--ds-h-control-sm);padding:0 var(--ds-sp-3);font-size:var(--ds-fs-13)}
   .tr-msgs{gap:var(--ds-sp-4);padding-top:var(--ds-sp-4);padding-bottom:var(--ds-sp-4)}
   .tr-msg{max-width:92%}
-  .tr-grid2{grid-template-columns:1fr}
   .ds-input,.ds-select{font-size:var(--ds-fs-16)}   /* iOS 자동 확대 막기 */
 }
