@@ -119,19 +119,69 @@ function ensureRoom() {
   return changed;
 }
 
-/* ---------- 렌더링 ---------- */
+/* ---------- 렌더링 (이든팜 공통 디자인 부품 — design/docs/화면규칙.md 7-3절) ---------- */
+
+// 선 아이콘 (공통 규칙: 선 1.8 · 16)
+const ICONS = {
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  retry: '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/>',
+  delete: '<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/>',
+};
+
+function iconButton(action, label) {
+  const btn = h("button", "ds-ib");
+  btn.type = "button";
+  btn.dataset.action = action;
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[action]}</svg>`;
+  return btn;
+}
+
+// 언어 = 분류 꼬리표(dsTag 규칙). 같은 언어는 어느 방에서나 같은 색.
+const LANG_TAG = { EN: 1, VI: 2, TH: 3, ZH: 4, JA: 5, ID: 6, FR: 7, DE: 8, TW: 4, ES: 6, PT: 7, RU: 3, AR: 8 };
+const TONE_LABEL = { formal: "격식", neutral: "정중·표준", friendly: "친근" };
+
+function hashIndex(text, n) {
+  let x = 0;
+  for (const ch of String(text)) x = (x * 31 + ch.codePointAt(0)) >>> 0;
+  return (x % n) + 1;
+}
+
+function langTag(code) {
+  const tag = h("span", `ds-tag c${LANG_TAG[code] || hashIndex(code, 8)}`, code);
+  tag.title = languageByCode(code).label;
+  return tag;
+}
 
 function renderRooms() {
   el.roomList.replaceChildren(...liveRooms().map((room) => {
     const lang = languageByCode(room.lang);
-    const li = h("li", room.id === state.activeRoomId ? "active" : "");
+    const li = h("li", room.id === state.activeRoomId ? "tr-room on" : "tr-room");
     li.dataset.id = room.id;
-    const info = h("div", "room-info");
+    li.title = room.name;
+    if (room.id === state.activeRoomId) li.setAttribute("aria-current", "true");
     const last = liveMessages(room).at(-1);
-    info.append(h("strong", "", room.name), h("span", "", last ? last.source : `한국어 ↔ ${lang.label}`));
-    li.append(h("div", "room-badge", lang.code), info);
+    const preview = last ? (last.source || last.translation || "이미지") : `한국어 ↔ ${lang.label}`;
+    const txt = h("div", "tr-room__txt");
+    txt.append(h("span", "tr-room__nm", room.name), h("span", "tr-room__last", preview));
+    li.append(langTag(room.lang), txt);
     return li;
   }));
+}
+
+/** 메뉴 맨 아래 내 계정: 이름 꼬리표(dsWho 규칙 — 성까지 전체 이름) + 역할 */
+function renderMe() {
+  const user = auth?.user;
+  if (!user) return;
+  const name = user.name || (user.email || "").split("@")[0];
+  const tag = $("me-name");
+  tag.textContent = name;
+  tag.className = `ds-who w${hashIndex(user.email || name, 16)}`;
+  tag.title = user.email || name;
+  $("me-role").textContent = user.role === "admin" ? "관리자" : "직원";
+  // 접힌 메뉴에서는 아이콘만 보이므로 이름을 풍선으로
+  $("me-ico").parentElement.title = `${name} · ${$("me-role").textContent}`;
 }
 
 function renderHead() {
@@ -139,13 +189,13 @@ function renderHead() {
   if (!room) return;
   const lang = languageByCode(room.lang);
   el.roomName.textContent = room.name;
-  el.roomMeta.textContent = `한국어 ↔ ${lang.label}`;
+  el.roomMeta.textContent = `한국어 ↔ ${lang.label} · ${TONE_LABEL[room.tone] || TONE_LABEL.neutral}`;
   el.input.placeholder = `한국어 또는 ${lang.label}로 입력하세요`;
 }
 
 /** 첨부 이미지 썸네일. 원본은 이 기기 IndexedDB에만 있어서 비동기로 채운다. */
 function imagesNode(msg) {
-  const box = h("div", "msg-images");
+  const box = h("div", "tr-imgs");
   msg.images.forEach((meta, index) => {
     const img = document.createElement("img");
     img.alt = meta.name || "첨부한 이미지";
@@ -158,7 +208,7 @@ function imagesNode(msg) {
     for (const img of [...box.querySelectorAll("img")]) {
       const item = items?.[Number(img.dataset.index)];
       if (item?.dataUrl) img.src = item.dataUrl;
-      else img.replaceWith(h("div", "thumb-missing", "이 기기에 원본 없음"));
+      else img.replaceWith(h("div", "tr-thumb-missing", "이 기기에 원본 없음"));
     }
   }).catch(() => { /* 썸네일은 못 보여도 번역문은 보인다 */ });
 
@@ -167,40 +217,46 @@ function imagesNode(msg) {
 
 function messageNode(msg) {
   const side = msg.direction === "ko->target" ? "me" : "partner";
-  const node = h("article", `msg ${side} ${msg.status === "done" ? "" : msg.status}`);
+  const node = h("article", `tr-msg ${side}${msg.status === "done" ? "" : ` ${msg.status}`}`);
   node.dataset.id = msg.id;
 
   const hasImages = !!msg.images?.length;
   if (hasImages) node.append(imagesNode(msg));
-  if (msg.userNote) node.append(h("p", "msg-source", msg.userNote));
+  if (msg.userNote) node.append(h("p", "tr-src", msg.userNote));
   if (msg.source) {
-    if (hasImages) node.append(h("span", "msg-ocr", "이미지에서 읽은 글자"));
-    node.append(h("p", "msg-source", msg.source));
+    if (hasImages) node.append(h("span", "ds-tag tr-ocr", "이미지에서 읽은 글자"));
+    node.append(h("p", "tr-src", msg.source));
   }
 
+  // 진행 중 = 상태 알약(progress). 오류 = 사라지지 않는 띠(critical).
   if (msg.status === "pending") {
-    const bubble = h("div", "bubble");
-    bubble.append(h("span", "dots", hasImages ? "글자를 읽고 번역하는 중" : "번역 중"));
-    node.append(bubble);
+    node.append(h("span", "ds-badge progress", hasImages ? "글자를 읽고 번역하는 중" : "번역 중"));
     return node;
   }
 
-  node.append(h("div", "bubble", msg.status === "done" ? msg.translation : msg.error));
-  if (msg.status === "done" && msg.note) node.append(h("p", "msg-note", msg.note));
+  if (msg.status === "done") {
+    node.append(h("div", "tr-bubble", msg.translation));
+    if (msg.note) {
+      const note = h("p", "tr-note");
+      note.append(h("b", "", "참고"), h("span", "", msg.note));
+      node.append(note);
+    }
+  } else {
+    node.append(h("div", "ds-banner critical tr-err", msg.error));
+  }
 
-  const tools = h("div", "msg-tools");
-  const action = (name, label) => {
-    const btn = h("button", "", label);
-    btn.type = "button";
-    btn.dataset.action = name;
-    return btn;
-  };
+  const tools = h("div", "tr-tools");
   if (msg.status === "done") {
     const lang = languageByCode(activeRoom().lang).label;
-    tools.append(h("span", "dir", msg.direction === "ko->target" ? `한국어 → ${lang}` : `${lang} → 한국어`));
-    tools.append(action("copy", "복사"));
+    tools.append(h("span", "tr-dir", msg.direction === "ko->target" ? `한국어 → ${lang}` : `${lang} → 한국어`));
+    tools.append(iconButton("copy", "번역문 복사"), iconButton("retry", "다시 번역"));
+  } else {
+    const retry = h("button", "ds-btn sm", "재시도");
+    retry.type = "button";
+    retry.dataset.action = "retry";
+    tools.append(retry);
   }
-  tools.append(action("retry", msg.status === "done" ? "다시 번역" : "재시도"), action("delete", "삭제"));
+  tools.append(iconButton("delete", "삭제"));
   node.append(tools);
   return node;
 }
@@ -210,7 +266,7 @@ function renderMessages({ scroll = true } = {}) {
   if (!room) return;
   const list = liveMessages(room);
   if (!list.length) {
-    const empty = h("div", "empty");
+    const empty = h("div", "tr-empty");
     const lang = languageByCode(room.lang).label;
     empty.append(
       h("strong", "", "비즈니스 문맥에 맞춰 번역합니다"),
@@ -325,18 +381,18 @@ function setAttachments(list) {
     return;
   }
   const nodes = attachments.map((image, index) => {
-    const item = h("div", "attach-item");
+    const item = h("div", "tr-attach__it");
     const thumb = document.createElement("img");
     thumb.src = image.dataUrl;
     thumb.alt = image.name;
-    const remove = h("button", "attach-remove", "✕");
+    const remove = h("button", "ds-x", "✕");
     remove.type = "button";
     remove.dataset.index = String(index);
     remove.setAttribute("aria-label", `${image.name} 빼기`);
     item.append(thumb, remove);
     return item;
   });
-  nodes.push(h("span", "attach-hint", `이미지 ${attachments.length}장 · 속의 글자를 읽어 번역합니다`));
+  nodes.push(h("span", "tr-attach__hint", `이미지 ${attachments.length}장 · 속의 글자를 읽어 번역합니다`));
   box.replaceChildren(...nodes);
   box.hidden = false;
 }
@@ -444,14 +500,36 @@ function applyDisplay({ theme, textSize } = settings) {
   const root = document.documentElement;
   if (theme === "light" || theme === "dark") root.dataset.theme = theme;
   else delete root.dataset.theme;
-  if (textSize === "l" || textSize === "xl") root.dataset.size = textSize;
+  // 대화 글자는 공통 6단계 안에서만: 보통 16 / 크게 20 (옛 설정 "xl" 은 크게로)
+  if (textSize === "l" || textSize === "xl") root.dataset.size = "l";
   else delete root.dataset.size;
+}
+
+/* 메뉴 접기 (화면규칙 7절: 폭 60 · 아이콘만 · 기억 · 1000px 이하는 접힌 채 시작) */
+const NAV_MINI_KEY = "biztr.nav.mini";
+
+function setNavMini(on, { remember = true } = {}) {
+  el.app.classList.toggle("mini", on);
+  const btn = $("btn-nav-mini");
+  const label = on ? "메뉴 펼치기" : "메뉴 접기";
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+  if (remember) {
+    try { localStorage.setItem(NAV_MINI_KEY, on ? "1" : "0"); } catch { /* 무시 */ }
+  }
+}
+
+function initNavMini() {
+  let saved = null;
+  try { saved = localStorage.getItem(NAV_MINI_KEY); } catch { /* 무시 */ }
+  if (window.innerWidth <= 1000) setNavMini(true, { remember: false });
+  else setNavMini(saved === "1", { remember: false });
 }
 
 function openSettings() {
   $("set-f-model").value = settings.model;
   $("set-f-theme").value = settings.theme || "auto";
-  $("set-f-size").value = settings.textSize || "m";
+  $("set-f-size").value = settings.textSize === "l" || settings.textSize === "xl" ? "l" : "m";
   $("set-account-email").textContent = auth?.user?.email ?? "";
   $("set-account-role").textContent = auth?.user?.role === "admin" ? "관리자" : "직원";
   $("set-admin").hidden = auth?.user?.role !== "admin";
@@ -597,6 +675,8 @@ function bindEvents() {
   $("btn-new-room").addEventListener("click", () => openRoomDialog(null));
   $("btn-room-settings").addEventListener("click", () => openRoomDialog(activeRoom()));
   $("btn-settings").addEventListener("click", openSettings);
+  $("btn-logout").addEventListener("click", signOut);
+  $("btn-nav-mini").addEventListener("click", () => setNavMini(!el.app.classList.contains("mini")));
   $("btn-open-sidebar").addEventListener("click", openSidebar);
   $("btn-close-sidebar").addEventListener("click", closeSidebar);
   el.backdrop.addEventListener("click", closeSidebar);
@@ -607,7 +687,7 @@ function bindEvents() {
   });
 
   el.messages.addEventListener("click", (e) => {
-    const thumb = e.target.closest(".msg-images img");
+    const thumb = e.target.closest(".tr-imgs img");
     if (thumb?.src) {
       showImage(thumb.src);
       return;
@@ -615,7 +695,7 @@ function bindEvents() {
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
     const room = activeRoom();
-    const msg = room.messages.find((m) => m.id === btn.closest(".msg").dataset.id);
+    const msg = room.messages.find((m) => m.id === btn.closest(".tr-msg").dataset.id);
     if (!msg) return;
     if (btn.dataset.action === "copy") copyText(msg.translation);
     if (btn.dataset.action === "retry") runTranslation(room, msg);
@@ -737,6 +817,7 @@ function startApp() {
   const firstTime = !localStorage.getItem(stateKey(auth.user.id));
   state = loadState(auth.user.id, { createDefault: !firstTime });
   if (!firstTime) saveState(auth.user.id, state);
+  renderMe();
   renderAll();
   autosize();
   runSync({ silent: false });
@@ -751,6 +832,7 @@ function init() {
   if (/iPad|iPhone|iPod/.test(navigator.userAgent)) document.documentElement.classList.add("is-ios");
 
   applyDisplay(settings);
+  initNavMini();
   bindEvents();
   setAuthMode("login");
 

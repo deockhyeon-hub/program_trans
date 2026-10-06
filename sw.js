@@ -3,9 +3,9 @@
 // 배포할 때 CACHE 버전을 올리면 이전 캐시가 정리된다.
 
 // 글꼴 조각(fonts/subset/*.woff2)은 화면에 필요한 것만 받아지고 아래 fetch 처리에서 자동으로 캐시된다.
-const CACHE = "biztr-shell-v8";
+const CACHE = "biztr-shell-v9";
 const SHELL = [
-  "./", "index.html", "css/styles.css", "fonts/pretendard.css",
+  "./", "index.html", "css/design.css", "css/styles.css", "fonts/pretendard.css",
   "js/theme-boot.js", "js/app.js", "js/api.js", "js/store.js", "js/translator.js", "js/images.js",
   "manifest.webmanifest", "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];

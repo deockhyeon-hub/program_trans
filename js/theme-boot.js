@@ -5,7 +5,7 @@
     var s = JSON.parse(localStorage.getItem("biztr.settings.v1") || "{}");
     var root = document.documentElement;
     if (s.theme === "light" || s.theme === "dark") root.setAttribute("data-theme", s.theme);
-    if (s.textSize === "l" || s.textSize === "xl") root.setAttribute("data-size", s.textSize);
+    if (s.textSize === "l" || s.textSize === "xl") root.setAttribute("data-size", "l");
   } catch (e) {
     /* 설정을 못 읽어도 기본 화면으로 뜬다 */
   }
