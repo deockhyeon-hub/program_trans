@@ -248,6 +248,7 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 
 **다음에 할 것**
 
-- [ ] design 채팅이 `trans/target` 합치기 → 그 뒤로 디자인 바뀜은 apply 로 같이 반영
+- [x] design 채팅이 `trans/target` 합침 (design 90c2b05, 10-06) — targets.json "trans" · 화면규칙 7-3절(7-2 다음). 가지 · 워크트리도 지움.
+  이제 design 이 색 · 부품을 바꾸면 `apply.py` 가 `css/design.css` 를 같이 바꾼다 → 그때는 program_trans 도 커밋 · push 해야 배포된다.
 - [ ] 휴대폰에서 새 모양 · 어둡게 · 크게 확인
 - [ ] design 에 어두운 테마가 생기면 앱의 어두운 토큰 블록을 지우고 그쪽으로
