@@ -477,6 +477,7 @@ select.ds-sel-native{display:none!important}   /* 값 · change 는 그대로 �
   background:var(--ds-bg-layer-default);border:1px solid var(--ds-stroke-control);border-radius:var(--ds-r-control);cursor:pointer;text-align:left;
   font:var(--ds-fw-regular) var(--ds-fs-14)/1 var(--ds-font);color:var(--ds-fg-neutral);vertical-align:middle}
 .ds-sel.sm{height:var(--ds-h-control-sm);font-size:var(--ds-fs-13)}
+td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭을 따름(처방 입력 «상» 칸처럼 좁은 칸 — 연구 채팅 지적) */
 .ds-sel[hidden]{display:none!important}
 .ds-sel:hover{border-color:var(--ds-fg-disabled)}
 .ds-sel:focus-visible,.ds-sel[aria-expanded="true"]{outline:0;border-color:var(--ds-stroke-focus);box-shadow:var(--ds-focus-ring)}
