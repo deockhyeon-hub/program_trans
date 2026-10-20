@@ -19,7 +19,8 @@ export const LANGUAGES = [
   { code: "AR", name: "Arabic", label: "아랍어" },
 ];
 
-const HISTORY_LIMIT = 8;
+// 서버(v2)가 한 줄씩 500자로 잘라 쓴다. 상대가 쓰는 호칭 · 용어를 따라가려면 조금 넉넉히 보낸다.
+const HISTORY_LIMIT = 12;
 
 export class TranslateError extends Error {
   constructor(message, { status = 0, retryable = false, code = "" } = {}) {
