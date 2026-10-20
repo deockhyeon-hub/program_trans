@@ -252,3 +252,63 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
   이제 design 이 색 · 부품을 바꾸면 `apply.py` 가 `css/design.css` 를 같이 바꾼다 → 그때는 program_trans 도 커밋 · push 해야 배포된다.
 - [ ] 휴대폰에서 새 모양 · 어둡게 · 크게 확인
 - [ ] design 에 어두운 테마가 생기면 앱의 어두운 토큰 블록을 지우고 그쪽으로
+
+### 7 · 10-20 20:20 — 번역이 「수시로」 실패하던 원인: 워커가 홍콩에서 돌면 Anthropic 이 막는다 → 도쿄 고정 · 자동 재시도
+
+대표: 「번역 프로그램이 수시로 서버 연결이 안 된다고 나온다」.
+
+**원인 찾기 (실제 기록으로)**
+
+- Cloudflare 워커 지표 30일: 호출 2.4k · **워커 오류 0** (예외 0 · CPU 초과 0). 즉 워커 자체는 안 죽었다.
+- 같은 30일 Anthropic 으로 나간 요청: **2xx 269 · 4xx 47** — 실패는 워커 → Anthropic 구간.
+- D1 `messages.error` (재시도로 덮이지 않고 남은 실패): 「서버에 등록된 API 키에 문제가 있습니다」 **14건**(09-30 ~ 10-20 17:25), 「서버에 연결할 수 없습니다」 1건(10-20 09:31).
+- Observability 이벤트에서 실패한 번역 3건을 열어 보니 **모두 `colo: HKG`(홍콩)**, 502, 117~176ms 만에 끝남. 성공한 것은 NRT(도쿄) · SEA(시애틀).
+  접속은 LG U+ 휴대폰 · LG 파워콤 · 사무실 Whale 등 여러 곳 — 기기 문제가 아니라 경로 문제.
+- 무료 요금제의 한국 접속은 Cloudflare 의 LAX · SIN · SJC · HKG · SEA 등으로 그때그때 흩어진다(30일 ICN 은 10건뿐).
+  **Anthropic 은 홍콩에서 온 요청을 403 "Request not allowed" 로 막는다** (Cloudflare 커뮤니티 956434 에도 같은 사례).
+  우리 워커는 401/403 을 모두 「API 키 문제」 로 바꿔 보여 줘서 원인을 가렸다.
+- 09:31 「연결할 수 없습니다」 1건은 결이 다르다: 서버 쪽 POST 는 정상(info) 처리됐는데 앱이 응답을 못 받았다 — 휴대폰 전파 · 앱 전환으로 끊긴 것.
+
+**한 일**
+
+- `wrangler.toml` `[placement] region = "aws:ap-northeast-1"` — 워커를 도쿄 가까이에서만 돌린다.
+  도쿄는 Anthropic 지원 지역이고 D1(APAC)과도 가깝다. 미국으로 두면 D1 왕복이 요청마다 3~4번 늘어서 도쿄를 골랐다.
+- 워커(`worker/index.js`)
+  - 403 forbidden / "Request not allowed" 는 「번역 서버가 잠시 막힌 경로를 거쳤습니다. 다시 시도해 주세요.」 503 `code: region_block` — 더는 「API 키 문제」 라고 하지 않는다.
+  - Anthropic 429 · 5xx · 529 · 네트워크 끊김은 서버에서 1번 더 보낸다(0.7초, 429 는 1.5초 뒤).
+  - 모든 예외를 CORS 머리 붙인 JSON 503 으로 돌려준다. 예전엔 예외가 나면 CORS 없는 오류 화면이 가서 앱에 「연결할 수 없습니다」 로만 보였다.
+  - `ensureSchema` 의 CREATE 9번 왕복을 `DB.batch` 1번으로.
+  - `/api/health?where=1` → `{edge, runs}` : 요청이 들어온 곳과 워커가 실제로 도는 곳. 앞으로 점검용.
+  - `console.error` 로 Anthropic 오류 · 지역 차단 · 예외를 남긴다(Observability 에서 바로 보임).
+- 앱
+  - `js/api.js`: 요청마다 제한 시간(번역 120초 · 그 밖 25초). 끊기면 저절로 다시(번역 2번 · 동기화 등 3번 · 가입 1번 — 가입은 다시 보내면 「이미 가입」 으로 헷갈림). 503 도 1번 더.
+    인터넷이 끊겼으면(`navigator.onLine`) 「인터넷이 끊겨 있습니다…」 로 바로 알린다.
+  - `js/app.js`: 끊김(0) · 503 으로 실패한 번역에 `autoRetry` 표시 → 앱이 다시 보이거나(focus · visibilitychange) 인터넷이 돌아오면(online) 저절로 다시 보낸다.
+    보낸 지 30분 안 · 한 메시지 최대 2번 · 한 번에 5개까지. 사람이 「재시도」 를 누르면 횟수 초기화.
+  - `js/store.js`: 번역 중에 앱이 닫혔던 것(`pending`)도 다시 열 때 `autoRetry` 로 → 첫 동기화 뒤 저절로 다시.
+  - `sw.js` 캐시 `biztr-shell-v10`.
+
+**확인한 수치**
+
+| 항목 | 결과 |
+|---|---|
+| 워커 모의 시험(node, D1 · fetch 흉내) | 8/8 통과 — 정상 · 홍콩 403→503 region_block · 진짜 401→키 안내 · 529 뒤 재시도 성공 · 끊김 2번→503 JSON · D1 예외→503+CORS · health · 동기화 |
+| 앱 api.js 모의 시험 | 7/7 통과 — 끊김 1번 뒤 성공(2회) · 2번 끊김→status 0 · 503 뒤 성공 · 502 는 재시도 안 함 · 동기화 3번째 성공 · 401 즉시 · 가입 1회 |
+| 배포 전 비교 | 배포돼 있던 워커(beecf055)와 저장소 HEAD 의 함수 목록 같음(차이는 esbuild 의 한글 이스케이프뿐) |
+| 워커 배포 | 버전 `6d930d0e`, 비밀값 `ANTHROPIC_API_KEY` · D1 그대로, placement `{"mode":"targeted"}` |
+| 실행 위치 | 이 PC: `edge SEA → runs NRT` 6/6 · 브라우저: `edge LAX → runs NRT` |
+| 실제 번역 1건(대화엔 안 남김) | 200 · 2.9초 · "This is a connection test. I will send you the quotation tomorrow." |
+| Pages | push 뒤 `biztr-shell-v10` · `MSG_NETWORK` 확인 |
+
+**밟은 함정**
+
+- 대시보드 안에서 `/api/v4/.../d1/.../query` 를 fetch 로 부르면 Cloudflare 자체 방화벽이 SQL 문장을 보고 막는다(403 「Sorry, you have been blocked」). D1 조회는 대시보드 **Console 칸**에 쳐서 했다. Observability 조회 API 도 같은 이유로 막혀 화면에서 이벤트를 열어 봤다.
+- wrangler 로그인은 09-22 와 같은 방법(브라우저에서 PKCE → `oauth2/token` 교환 → `CLOUDFLARE_API_TOKEN`). 토큰은 1시간짜리, 세션 tmp 에만 두었다.
+- 「API 키 문제」 문구 때문에 키를 의심하기 쉽다. 같은 키로 269번 성공했으니 키 문제가 아니다 — 문구를 믿지 말고 colo 를 볼 것.
+
+**다음에 할 것**
+
+- [ ] 1~2주 뒤 Observability 에서 `region block` · `anthropic error` 로그가 0 인지 확인 (`/api/health?where=1` 의 runs 가 NRT 인지도)
+- [ ] 예전에 실패로 남은 14건은 자동으로 다시 보내지 않는다(30분 넘음). 필요하면 말풍선의 「재시도」
+- [ ] 휴대폰 설치 앱은 한두 번 다시 열어야 v10 이 된다
+- [ ] (만약 도쿄 고정이 풀리는 일이 생기면) 홍콩일 때만 Durable Object(locationHint "wnam")로 Anthropic 을 부르는 길이 예비책
