@@ -11,6 +11,13 @@ workers_dev = true
 [observability]
 enabled = true
 
+# 워커를 도쿄 가까이에서만 돌린다 (2026-10-20).
+# 까닭: 한국 통신사 접속이 가끔 홍콩(HKG) 데이터센터로 가는데, Anthropic 은 홍콩에서 온 요청을
+#        403 "Request not allowed" 로 막는다. 그때 앱에 「API 키 문제」 가 떴다.
+# 도쿄는 Anthropic 지원 지역이고, D1(APAC)에도 가깝다.
+[placement]
+region = "aws:ap-northeast-1"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "biz-translator-db"

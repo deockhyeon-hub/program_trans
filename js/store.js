@@ -90,6 +90,10 @@ function normalizeMessage(m) {
     ts: Number(m.ts) || Date.now(),
     updatedAt: Number(m.updatedAt) || Number(m.ts) || Date.now(),
     deleted: !!m.deleted,
+    // 연결이 끊겨 실패했거나(앱 전환 · 전파) 번역 중에 앱이 닫힌 것은 앱이 다시 보일 때 저절로 다시 보낸다.
+    // 이 기기에만 있는 표시다(서버로 보내지 않는다).
+    autoRetry: m.status !== "done" && (m.status === "pending" || !!m.autoRetry),
+    autoTries: Number(m.autoTries) || 0,
   };
 }
 

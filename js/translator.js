@@ -22,9 +22,10 @@ export const LANGUAGES = [
 const HISTORY_LIMIT = 8;
 
 export class TranslateError extends Error {
-  constructor(message, { status = 0, retryable = false } = {}) {
+  constructor(message, { status = 0, retryable = false, code = "" } = {}) {
     super(message);
     this.status = status;
+    this.code = code;
     this.retryable = retryable;
   }
 }
@@ -65,6 +66,7 @@ export async function translate({ token, model, room, text, userNote = "", image
     if (err instanceof ApiError) {
       throw new TranslateError(err.message, {
         status: err.status,
+        code: err.code || "",
         retryable: err.status === 0 || err.status === 429 || err.status >= 500,
       });
     }

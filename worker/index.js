@@ -183,9 +183,10 @@ PRIMARY KEY (user_id, day)
 
 let schemaReady = false;
 
+// 표 만들기 9개를 한 번에 보낸다(예전엔 9번 왕복 → 첫 요청이 느리고 실패할 자리가 많았다).
 async function ensureSchema(env) {
 if (schemaReady) return;
-for (const sql of SCHEMA) await env.DB.prepare(sql).run();
+await env.DB.batch(SCHEMA.map((sql) => env.DB.prepare(sql)));
 schemaReady = true;
 }
 
@@ -415,12 +416,30 @@ return status >= 500
 }
 }
 
-async function postAnthropic(request) {
-const res = await fetch(ANTHROPIC_URL, {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Anthropic 은 홍콩 등 지원하지 않는 지역에서 온 요청을 403 "Request not allowed" 로 막는다.
+// 워커가 홍콩(HKG) 데이터센터에서 돌면 이렇게 된다 (2026-10-20 확인: 실패 3건 모두 HKG).
+// wrangler.toml 의 [placement] 로 도쿄에서 돌게 했고, 그래도 생기면 이 표시로 알아본다.
+function isRegionBlock(status, data) {
+if (status !== 403) return false;
+const type = data?.error?.type || "";
+const msg = data?.error?.message || "";
+return type === "forbidden" || /request not allowed/i.test(msg);
+}
+
+// 한 번 보내기. 네트워크가 끊겨도 예외를 던지지 않고 { res: null } 로 돌려준다.
+async function postAnthropicOnce(request) {
+let res;
+try {
+res = await fetch(ANTHROPIC_URL, {
 method: "POST",
 headers: request.headers,
 body: JSON.stringify(request.body),
 });
+} catch (err) {
+return { res: null, data: null, netError: String(err?.message || err) };
+}
 let data = null;
 try {
 data = await res.json();
@@ -428,6 +447,17 @@ data = await res.json();
 data = null;
 }
 return { res, data };
+}
+
+// 잠깐의 혼잡(429 · 5xx · 529)과 네트워크 끊김은 한 번 더 보내 본다.
+async function postAnthropic(request) {
+let out = await postAnthropicOnce(request);
+const s = out.res ? out.res.status : 0;
+if (s === 0 || s === 429 || s >= 500) {
+await sleep(s === 429 ? 1500 : 700);
+out = await postAnthropicOnce(request);
+}
+return out;
 }
 
 // 받은 이미지를 검사해 Anthropic에 보낼 형태로 만든다. 문제가 있으면 error 로 알린다.
@@ -473,14 +503,25 @@ const history = Array.isArray(body.history) ? body.history : [];
 // Opus 5는 안전 분류기가 요청을 거절할 수 있어 서버 측 폴백을 기본으로 켠다.
 const useFallbacks = model === "claude-opus-5";
 const args = { model, room, text, userNote, history, images };
-let { res, data } = await postAnthropic(buildRequest(env, { ...args, useFallbacks }));
+let { res, data, netError } = await postAnthropic(buildRequest(env, { ...args, useFallbacks }));
 
-if (!res.ok && useFallbacks && res.status === 400) {
-({ res, data } = await postAnthropic(buildRequest(env, { ...args, useFallbacks: false })));
+if (res && !res.ok && useFallbacks && res.status === 400) {
+({ res, data, netError } = await postAnthropic(buildRequest(env, { ...args, useFallbacks: false })));
+}
+
+if (!res) {
+console.error("anthropic network error", request.cf?.colo, netError);
+return fail("번역 서버(Anthropic)에 닿지 못했습니다. 잠시 후 다시 시도해 주세요.", 503, request, env);
 }
 
 if (!res.ok) {
 const apiMessage = data?.error?.message || "";
+if (isRegionBlock(res.status, data)) {
+// 키 문제가 아니다. 잘못된 안내(「API 키 문제」)를 하지 않는다.
+console.error("anthropic region block", request.cf?.colo, apiMessage);
+return fail("번역 서버가 잠시 막힌 경로를 거쳤습니다. 다시 시도해 주세요.", 503, request, env, { code: "region_block" });
+}
+console.error("anthropic error", res.status, request.cf?.colo, apiMessage);
 const status = res.status === 401 || res.status === 403 ? 502 : res.status;
 return fail(describeHttpError(res.status, apiMessage), status, request, env);
 }
@@ -717,8 +758,30 @@ const usage = await env.DB.prepare(
 return json({ users: users.results || [], invites: invites.results || [], usage: usage.results || [] }, 200, request, env);
 }
 
+// 워커가 실제로 도는 곳(바깥으로 나가는 곳). /api/health?where=1 로 확인한다.
+async function egressColo() {
+try {
+const t = await (await fetch("https://www.cloudflare.com/cdn-cgi/trace")).text();
+return (t.match(/^colo=(\w+)/m) || [])[1] || "?";
+} catch {
+return "?";
+}
+}
+
 export default {
+// 어떤 예외가 나도 CORS 머리를 붙인 JSON 으로 돌려준다.
+// (예전엔 예외가 나면 CORS 없는 오류 화면이 가서, 앱에서는 「서버에 연결할 수 없습니다」로만 보였다.)
 async fetch(request, env) {
+try {
+return await route(request, env);
+} catch (err) {
+console.error("unhandled", request.method, new URL(request.url).pathname, err?.stack || String(err));
+return fail("서버에서 잠깐 오류가 났습니다. 다시 시도해 주세요.", 503, request, env, { code: "server_error" });
+}
+},
+};
+
+async function route(request, env) {
 const url = new URL(request.url);
 const path = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -727,7 +790,9 @@ return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 }
 
 if (path === "/" || path === "/api/health") {
-return json({ ok: true, service: "biz-translator-api" }, 200, request, env);
+const info = { ok: true, service: "biz-translator-api", edge: request.cf?.colo || "?" };
+if (url.searchParams.get("where")) info.runs = await egressColo();
+return json(info, 200, request, env);
 }
 
 if (!env.DB) return fail("D1 바인딩(DB)이 설정되지 않았습니다.", 500, request, env);
@@ -775,5 +840,4 @@ if (path === "/api/admin/invites" && request.method === "POST") return handleCre
 if (path === "/api/admin/overview" && request.method === "GET") return handleAdminOverview(request, env, user);
 
 return fail("알 수 없는 경로입니다.", 404, request, env);
-},
-};
+}

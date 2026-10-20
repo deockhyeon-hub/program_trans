@@ -289,6 +289,35 @@ function renderAll() {
 
 /* ---------- 번역 ---------- */
 
+const AUTO_RETRY_MAX = 2;               // 한 메시지를 저절로 다시 보내는 최대 횟수
+const AUTO_RETRY_WINDOW = 30 * 60000;   // 보낸 지 30분 안의 것만 (오래된 것을 몰래 다시 번역하지 않는다)
+let retryingInterrupted = false;
+
+// 연결이 끊겨 실패한 번역을 다시 보낸다. 휴대폰에서 번역을 기다리다 다른 앱으로 넘어가면
+// 요청이 끊기는데, 돌아왔을 때 사람이 「재시도」 를 누르지 않아도 되게 한다.
+async function retryInterrupted() {
+  if (!auth?.token || !state || retryingInterrupted) return;
+  if (navigator.onLine === false || document.visibilityState === "hidden") return;
+  const since = Date.now() - AUTO_RETRY_WINDOW;
+  const jobs = [];
+  for (const room of liveRooms()) {
+    for (const m of liveMessages(room)) {
+      if (m.status === "error" && m.autoRetry && (m.autoTries || 0) < AUTO_RETRY_MAX && m.ts >= since) jobs.push([room, m]);
+    }
+  }
+  if (!jobs.length) return;
+  retryingInterrupted = true;
+  try {
+    for (const [room, m] of jobs.slice(-5)) {
+      m.autoRetry = false;
+      m.autoTries = (m.autoTries || 0) + 1;
+      await runTranslation(room, m);
+    }
+  } finally {
+    retryingInterrupted = false;
+  }
+}
+
 async function runTranslation(room, msg) {
   msg.status = "pending";
   msg.error = "";
@@ -330,13 +359,21 @@ async function runTranslation(room, msg) {
       translation: result.translation,
       note: result.note,
       error: "",
+      autoRetry: false,
+      autoTries: 0,
     });
   } catch (err) {
     if (err.status === 401) {
       handleSignedOut("로그인이 만료되었습니다. 다시 로그인해 주세요.");
       return;
     }
-    Object.assign(msg, { status: "error", error: err.message || "알 수 없는 오류가 발생했습니다." });
+    // 연결 끊김(0) · 잠깐의 서버 문제(503)는 앱이 다시 보이거나 인터넷이 돌아오면 저절로 다시 보낸다.
+    const passing = err.status === 0 || err.status === 503;
+    Object.assign(msg, {
+      status: "error",
+      error: err.message || "알 수 없는 오류가 발생했습니다.",
+      autoRetry: passing && (msg.autoTries || 0) < AUTO_RETRY_MAX,
+    });
   }
 
   // 번역 중에 메시지나 채팅방이 삭제됐을 수 있다.
@@ -698,7 +735,10 @@ function bindEvents() {
     const msg = room.messages.find((m) => m.id === btn.closest(".tr-msg").dataset.id);
     if (!msg) return;
     if (btn.dataset.action === "copy") copyText(msg.translation);
-    if (btn.dataset.action === "retry") runTranslation(room, msg);
+    if (btn.dataset.action === "retry") {
+      msg.autoTries = 0; // 사람이 누른 재시도는 자동 횟수를 되돌린다
+      runTranslation(room, msg);
+    }
     if (btn.dataset.action === "delete") {
       msg.deleted = true;
       touch(msg);
@@ -805,10 +845,12 @@ function bindEvents() {
   $("set-invite-create").addEventListener("click", issueInvites);
 
   // 다른 기기에서 바뀐 내용을 가져온다.
-  window.addEventListener("focus", () => { runSync(); });
+  // 끊겨서 실패한 번역도 이때 다시 보낸다.
+  window.addEventListener("focus", () => { runSync(); retryInterrupted(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") runSync();
+    if (document.visibilityState === "visible") { runSync(); retryInterrupted(); }
   });
+  window.addEventListener("online", () => { runSync(); retryInterrupted(); });
 }
 
 function startApp() {
@@ -820,7 +862,8 @@ function startApp() {
   renderMe();
   renderAll();
   autosize();
-  runSync({ silent: false });
+  // 번역 중에 앱이 닫혔던 것은 첫 동기화 뒤 다시 보낸다.
+  runSync({ silent: false }).then(() => retryInterrupted());
 }
 
 function init() {
