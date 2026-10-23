@@ -273,7 +273,9 @@ function renderMessages({ scroll = true } = {}) {
     empty.append(
       h("strong", "", "비즈니스 문맥에 맞춰 번역합니다"),
       h("p", "", `한국어를 입력하면 ${lang}로, ${lang}를 입력하면 한국어로 번역합니다. 직역이 아니라 실제 업무 메일·메신저에서 쓰는 자연스러운 표현으로 다듬습니다.`),
-      h("p", "", "이미지도 됩니다. 메일 캡처·견적서 사진을 끌어다 놓거나 Ctrl+V로 붙여넣으면 속의 글자를 읽어 번역합니다."),
+      h("p", "", desktopPointer.matches
+        ? "이미지도 됩니다. 메일 캡처·견적서 사진을 끌어다 놓거나 Ctrl+V로 붙여넣으면 속의 글자를 읽어 번역합니다."
+        : "사진도 됩니다. 카톡·Zalo 에서 사진을 길게 눌러 복사한 뒤 입력칸 옆 클립보드 단추를 누르면 바로 붙고, 갤러리에 저장된 캡처는 사진 단추로 고릅니다."),
     );
     el.messages.replaceChildren(empty);
     return;
@@ -556,17 +558,31 @@ async function clipSig(file) {
   }
 }
 
-async function readClipboardImages() {
+// 클립보드를 한 번만 읽는다(아이폰은 읽을 때마다 「붙여넣기」 말풍선을 띄우므로 글도 같은 번에 꺼낸다).
+async function readClipboard({ withText = false } = {}) {
   if (!navigator.clipboard?.read) return null;
   const items = await navigator.clipboard.read();
   const files = [];
+  let text = "";
   for (const item of items) {
     const type = item.types.find((t) => t.startsWith("image/"));
-    if (!type) continue;
-    const blob = await item.getType(type);
-    files.push(new File([blob], `복사한 이미지.${type.split("/")[1] || "png"}`, { type }));
+    if (type) {
+      const blob = await item.getType(type);
+      files.push(new File([blob], `복사한 이미지.${type.split("/")[1] || "png"}`, { type }));
+    } else if (withText && !text && item.types.includes("text/plain")) {
+      text = await (await item.getType("text/plain")).text();
+    }
   }
-  return files;
+  return { files, text };
+}
+
+async function readClipboardImages() {
+  return (await readClipboard())?.files || null;
+}
+
+// 휴대폰에서는 입력칸에 커서를 주면 자판이 올라와 화면을 가린다 → PC 에서만.
+function focusInputOnDesktop() {
+  if (desktopPointer.matches) el.input.focus({ preventScroll: true });
 }
 
 function hideClipOffer() {
@@ -587,24 +603,27 @@ function insertAtCursor(input, text) {
 async function pasteFromClipboard() {
   hideClipOffer();
   try {
-    const files = await readClipboardImages();
-    if (files?.length) {
-      lastClipSig = await clipSig(files[0]);
-      await addImageFiles(files);
-      el.input.focus();
+    let clip = await readClipboard({ withText: true });
+    // clipboard.read 가 없는 브라우저는 글만
+    if (!clip) clip = { files: [], text: navigator.clipboard?.readText ? await navigator.clipboard.readText() : "" };
+    if (clip.files.length) {
+      lastClipSig = await clipSig(clip.files[0]);
+      await addImageFiles(clip.files);
+      focusInputOnDesktop();
       return;
     }
-    const text = navigator.clipboard?.readText ? await navigator.clipboard.readText() : "";
-    if (text) {
-      insertAtCursor(el.input, text);
+    if (clip.text) {
+      insertAtCursor(el.input, clip.text);
       autosize();
       el.input.focus();
       return;
     }
-    toast("복사한 이미지나 글이 없습니다. 캡처하거나 복사한 뒤 눌러 주세요.");
+    toast("복사한 사진이나 글이 없습니다. 사진을 복사(길게 눌러 복사)한 뒤 눌러 주세요. 갤러리에 저장된 캡처는 옆의 사진 단추로 고르면 됩니다.");
   } catch {
-    toast("브라우저가 클립보드 읽기를 막았습니다. 입력칸에서 Ctrl+V 로 붙여 주세요.");
-    el.input.focus();
+    toast(desktopPointer.matches
+      ? "브라우저가 클립보드 읽기를 막았습니다. 입력칸에서 Ctrl+V 로 붙여 주세요."
+      : "클립보드를 읽지 못했습니다. 입력칸을 길게 눌러 「붙여넣기」 하거나, 사진 단추로 골라 주세요.");
+    focusInputOnDesktop();
   }
 }
 
@@ -971,7 +990,7 @@ function bindEvents() {
     hideClipOffer();
     clipSig(files[0]).then((sig) => { lastClipSig = sig; });
     addImageFiles(files);
-    if (document.activeElement !== el.input) el.input.focus({ preventScroll: true });
+    if (document.activeElement !== el.input) focusInputOnDesktop();
   });
 
   // 붙여넣기 단추 · 복사한 이미지 알약
@@ -982,7 +1001,7 @@ function bindEvents() {
     lastClipSig = sig;
     hideClipOffer();
     addImageFiles([file]);
-    el.input.focus();
+    focusInputOnDesktop();
   });
 
   // 대화창에 마우스를 올리면 바로 붙여넣을 수 있게
@@ -994,6 +1013,12 @@ function bindEvents() {
     if (hoveringChat) armPaste();
     else checkClipboardOffer();
   });
+  // 휴대폰: 카톡 · Zalo 에서 사진을 복사하고 앱으로 돌아오면(화면이 다시 보이면) · 입력칸을 누르면
+  // 「복사한 이미지 붙여넣기」 알약을 띄운다(읽기 허락을 한 번 받은 뒤. 안드로이드 크롬 · PC).
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") setTimeout(checkClipboardOffer, 300);
+  });
+  el.input.addEventListener("focus", () => checkClipboardOffer());
 
   window.addEventListener("dragenter", (e) => {
     if (el.app.hidden || !hasFiles(e)) return;
