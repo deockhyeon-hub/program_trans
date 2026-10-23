@@ -8,7 +8,9 @@
 export const MAX_IMAGES = 4;
 
 const MAX_EDGE = 1568;
-const PNG_LIMIT = 1_200_000; // 이보다 크면 JPEG로 다시 뽑는다
+// 이보다 크면 WEBP · JPEG 로 다시 뽑아 가장 작은 것을 보낸다 (2026-10-23: 1.2MB → 600KB).
+// 휴대폰에서 올리는 시간이 줄고, 글자는 q0.9 에서도 또렷하다.
+const PNG_LIMIT = 600_000;
 const SEND_LIMIT = 4_000_000; // 한 장당 전송 상한 (원본 바이트 기준)
 
 /* ---------- 변환 ---------- */
@@ -74,10 +76,13 @@ export async function prepareImage(file) {
     let blob = await toBlob(canvas, "image/png");
     let mediaType = "image/png";
     if (!blob || blob.size > PNG_LIMIT) {
-      const jpeg = await toBlob(canvas, "image/jpeg", 0.92);
-      if (jpeg && (!blob || jpeg.size < blob.size)) {
-        blob = jpeg;
-        mediaType = "image/jpeg";
+      // WEBP 를 못 만드는 브라우저는 PNG 를 돌려주므로 type 을 확인한다.
+      for (const [type, q] of [["image/webp", 0.9], ["image/jpeg", 0.92]]) {
+        const alt = await toBlob(canvas, type, q);
+        if (alt && alt.type === type && (!blob || alt.size < blob.size)) {
+          blob = alt;
+          mediaType = type;
+        }
       }
     }
     if (!blob) throw new Error("이미지를 변환하지 못했습니다.");

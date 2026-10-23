@@ -28,7 +28,7 @@ const el = {
   messages: $("messages"), input: $("input"), send: $("btn-send"),
   attachments: $("attachments"), fileImage: $("file-image"), dropzone: $("dropzone"),
   dlgRoom: $("dlg-room"), dlgSettings: $("dlg-settings"), dlgImage: $("dlg-image"),
-  toast: $("toast"),
+  toast: $("toast"), chat: $("chat"), clipOffer: $("clip-offer"), clipOfferImg: $("clip-offer-img"),
 };
 
 const liveRooms = () => state.rooms.filter((r) => !r.deleted);
@@ -229,8 +229,10 @@ function messageNode(msg) {
   }
 
   // 진행 중 = 상태 알약(progress). 오류 = 사라지지 않는 띠(critical).
+  // 흘려받는 번역문(partial)이 있으면 써지는 대로 보여 준다.
   if (msg.status === "pending") {
-    node.append(h("span", "ds-badge progress", hasImages ? "글자를 읽고 번역하는 중" : "번역 중"));
+    if (msg.partial) node.append(h("div", "tr-bubble typing", msg.partial));
+    node.append(h("span", "ds-badge progress", msg.partial ? "번역 중" : hasImages ? "글자를 읽고 번역하는 중" : "번역 중"));
     return node;
   }
 
@@ -318,9 +320,65 @@ async function retryInterrupted() {
   }
 }
 
+/* ---------- 흘려받기 화면 갱신 ---------- */
+// 번역문이 글자 단위로 들어오므로 화면 전체를 다시 그리지 않고 해당 말풍선만 고친다(한 화면 한 번).
+const livePending = new Set();
+let liveFrame = 0;
+
+function nearBottom() {
+  const box = el.messages;
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+}
+
+function paintLive(room, msg) {
+  if (!state || room.id !== state.activeRoomId) return;
+  livePending.add(msg);
+  if (liveFrame) return;
+  liveFrame = requestAnimationFrame(() => {
+    liveFrame = 0;
+    const stick = nearBottom();
+    for (const m of livePending) {
+      if (m.status !== "pending") continue;
+      const node = [...el.messages.querySelectorAll("article.tr-msg")].find((n) => n.dataset.id === m.id);
+      if (!node) continue;
+      const me = m.direction === "ko->target";
+      node.classList.toggle("me", me);
+      node.classList.toggle("partner", !me);
+      let bubble = node.querySelector(".tr-bubble");
+      const badge = node.querySelector(".ds-badge");
+      if (m.partial) {
+        if (!bubble) {
+          bubble = h("div", "tr-bubble typing", "");
+          node.insertBefore(bubble, badge);
+        }
+        bubble.textContent = m.partial;
+        if (badge) badge.textContent = "번역 중";
+      } else if (bubble) {
+        bubble.remove();
+      }
+    }
+    livePending.clear();
+    if (stick) el.messages.scrollTop = el.messages.scrollHeight;
+  });
+}
+
+// 이미지에서 읽은 원문은 번역보다 조금 늦게 따로 온다.
+function applySource(room, msg, text) {
+  const src = String(text || "").trim();
+  if (!src) return;
+  msg.source = src;
+  if (!state.rooms.includes(room) || !room.messages.includes(msg)) return;
+  if (msg.status === "pending") return; // 번역이 끝날 때 같이 저장된다
+  touch(msg);
+  persist();
+  renderRooms();
+  if (room.id === state.activeRoomId) renderMessages({ scroll: nearBottom() });
+}
+
 async function runTranslation(room, msg) {
   msg.status = "pending";
   msg.error = "";
+  msg.partial = "";
   if (room.id === state.activeRoomId) renderMessages();
 
   // 이미지 원본은 찍은 기기에만 있다. 다른 기기면 추출된 글자만으로 다시 번역한다.
@@ -350,7 +408,22 @@ async function runTranslation(room, msg) {
       userNote: images.length ? msg.userNote || "" : "",
       images,
       history,
+      onEvent: (ev) => {
+        if (ev.type === "meta") {
+          msg.direction = ev.direction;
+          paintLive(room, msg);
+        } else if (ev.type === "delta") {
+          msg.partial = (msg.partial || "") + ev.text;
+          paintLive(room, msg);
+        } else if (ev.type === "reset") {
+          msg.partial = "";
+          paintLive(room, msg);
+        } else if (ev.type === "source") {
+          applySource(room, msg, ev.text);
+        }
+      },
     });
+    delete msg.partial;
     // 이미지에서 읽어낸 글자를 원문으로 삼는다. 그래야 다른 기기·다음 번역 문맥에도 남는다.
     if (images.length && result.extractedText) msg.source = result.extractedText;
     Object.assign(msg, {
@@ -367,6 +440,7 @@ async function runTranslation(room, msg) {
       handleSignedOut("로그인이 만료되었습니다. 다시 로그인해 주세요.");
       return;
     }
+    delete msg.partial;
     // 연결 끊김(0) · 잠깐의 서버 문제(503)는 앱이 다시 보이거나 인터넷이 돌아오면 저절로 다시 보낸다.
     const passing = err.status === 0 || err.status === 503;
     Object.assign(msg, {
@@ -457,6 +531,124 @@ async function addImageFiles(fileList) {
 
 function hasFiles(event) {
   return [...(event.dataTransfer?.types || [])].includes("Files");
+}
+
+/* ---------- 클립보드 붙여넣기 (2026-10-23) ----------
+ * ① 대화창에 마우스를 올리면 입력칸에 커서가 간다 → 캡처 뒤 바로 Ctrl+V.
+ * ② 붙여넣기 단추: 클립보드의 이미지(없으면 글)를 한 번에 붙인다. 다른 창에 있다가 와도 한 번 누르면 끝.
+ * ③ 읽기 허락을 한 번 받은 뒤에는, 창으로 돌아오거나 마우스를 올리면 새로 복사한 이미지를
+ *    알약(복사한 이미지 붙여넣기)으로 띄운다. 누르면 붙는다.
+ */
+const desktopPointer = matchMedia("(hover: hover) and (pointer: fine)");
+let lastClipSig = "";      // 이미 붙였거나 알약으로 보여 준 이미지 (같은 것을 또 권하지 않는다)
+let offer = null;          // { file, sig, url }
+let clipChecking = false;
+let clipCheckedAt = 0;
+
+async function clipSig(file) {
+  try {
+    const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+    let sum = 0;
+    for (let i = 0; i < head.length; i += 1) sum = (sum * 31 + head[i]) >>> 0;
+    return `${file.type}:${file.size}:${sum}`;
+  } catch {
+    return `${file.type}:${file.size}`;
+  }
+}
+
+async function readClipboardImages() {
+  if (!navigator.clipboard?.read) return null;
+  const items = await navigator.clipboard.read();
+  const files = [];
+  for (const item of items) {
+    const type = item.types.find((t) => t.startsWith("image/"));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    files.push(new File([blob], `복사한 이미지.${type.split("/")[1] || "png"}`, { type }));
+  }
+  return files;
+}
+
+function hideClipOffer() {
+  if (offer?.url) URL.revokeObjectURL(offer.url);
+  offer = null;
+  el.clipOffer.hidden = true;
+  el.clipOfferImg.removeAttribute("src");
+}
+
+function insertAtCursor(input, text) {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + text + input.value.slice(end);
+  input.selectionStart = input.selectionEnd = start + text.length;
+}
+
+// 붙여넣기 단추
+async function pasteFromClipboard() {
+  hideClipOffer();
+  try {
+    const files = await readClipboardImages();
+    if (files?.length) {
+      lastClipSig = await clipSig(files[0]);
+      await addImageFiles(files);
+      el.input.focus();
+      return;
+    }
+    const text = navigator.clipboard?.readText ? await navigator.clipboard.readText() : "";
+    if (text) {
+      insertAtCursor(el.input, text);
+      autosize();
+      el.input.focus();
+      return;
+    }
+    toast("복사한 이미지나 글이 없습니다. 캡처하거나 복사한 뒤 눌러 주세요.");
+  } catch {
+    toast("브라우저가 클립보드 읽기를 막았습니다. 입력칸에서 Ctrl+V 로 붙여 주세요.");
+    el.input.focus();
+  }
+}
+
+// 읽기 허락이 이미 있을 때만 살짝 들여다본다(처음부터 허락 창을 띄우지 않는다).
+async function checkClipboardOffer() {
+  if (!navigator.clipboard?.read || !navigator.permissions?.query) return;
+  if (el.app.hidden || clipChecking || Date.now() - clipCheckedAt < 1200) return;
+  if (!document.hasFocus() || document.querySelector("dialog[open]")) return;
+  clipChecking = true;
+  clipCheckedAt = Date.now();
+  try {
+    const perm = await navigator.permissions.query({ name: "clipboard-read" }).catch(() => null);
+    if (!perm || perm.state !== "granted") return;
+    const files = await readClipboardImages();
+    const file = files?.[0];
+    if (!file) {
+      hideClipOffer();
+      return;
+    }
+    const sig = await clipSig(file);
+    if (sig === lastClipSig || sig === offer?.sig || attachments.length >= MAX_IMAGES) {
+      if (sig === lastClipSig) hideClipOffer();
+      return;
+    }
+    hideClipOffer();
+    offer = { file, sig, url: URL.createObjectURL(file) };
+    el.clipOfferImg.src = offer.url;
+    el.clipOffer.hidden = false;
+  } catch {
+    /* 클립보드를 못 읽으면 알약만 안 띄운다 */
+  } finally {
+    clipChecking = false;
+  }
+}
+
+// 대화창에 마우스가 오면 입력칸에 커서를 둔다 → Ctrl+V 가 바로 된다.
+function armPaste() {
+  if (!desktopPointer.matches || el.app.hidden || document.querySelector("dialog[open]")) return;
+  const active = document.activeElement;
+  // 다른 칸에 글을 쓰는 중이거나, 대화 글을 골라 복사하려는 중이면 건드리지 않는다.
+  if (active && active !== el.input && active.matches?.("input, textarea, select, [contenteditable='true']")) return;
+  if (String(window.getSelection?.() || "").trim()) return;
+  if (active !== el.input) el.input.focus({ preventScroll: true });
+  checkClipboardOffer();
 }
 
 function showImage(dataUrl) {
@@ -776,7 +968,31 @@ function bindEvents() {
       .filter(Boolean);
     if (!files.length) return;
     e.preventDefault(); // 이미지 파일명이 입력란에 들어가지 않게 막는다
+    hideClipOffer();
+    clipSig(files[0]).then((sig) => { lastClipSig = sig; });
     addImageFiles(files);
+    if (document.activeElement !== el.input) el.input.focus({ preventScroll: true });
+  });
+
+  // 붙여넣기 단추 · 복사한 이미지 알약
+  $("btn-paste").addEventListener("click", pasteFromClipboard);
+  el.clipOffer.addEventListener("click", () => {
+    if (!offer) return;
+    const { file, sig } = offer;
+    lastClipSig = sig;
+    hideClipOffer();
+    addImageFiles([file]);
+    el.input.focus();
+  });
+
+  // 대화창에 마우스를 올리면 바로 붙여넣을 수 있게
+  let hoveringChat = false;
+  el.chat.addEventListener("mouseenter", () => { hoveringChat = true; armPaste(); });
+  el.chat.addEventListener("mouseleave", () => { hoveringChat = false; });
+  // 캡처하러 다른 창에 갔다가 돌아오면(창 포커스) 한 번 더
+  window.addEventListener("focus", () => {
+    if (hoveringChat) armPaste();
+    else checkClipboardOffer();
   });
 
   window.addEventListener("dragenter", (e) => {

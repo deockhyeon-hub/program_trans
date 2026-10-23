@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' https://biz-translator-api.deockhyeon.workers.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'">
+        content="default-src 'self'; connect-src 'self' https://biz-translator-api.deockhyeon.workers.dev; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; base-uri 'none'">
   <meta name="theme-color" content="#FBFBFC" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#14171B" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -118,15 +118,24 @@
 
       <footer id="composer" class="tr-composer">
         <div id="attachments" class="tr-attach" hidden></div>
+        <!-- 복사해 둔 이미지가 있으면 뜨는 알약: 누르면 바로 붙는다 -->
+        <button id="clip-offer" class="tr-clip" type="button" hidden>
+          <img id="clip-offer-img" alt="">
+          <span><b>복사한 이미지 붙여넣기</b><small>누르거나 Ctrl+V</small></span>
+        </button>
         <div class="tr-composer__box">
           <button id="btn-attach" class="ds-ib" type="button" aria-label="이미지 첨부"
                   title="이미지 첨부 — 끌어다 놓거나 Ctrl+V로 붙여넣어도 됩니다">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M4 17l4.5-4.5a1.8 1.8 0 0 1 2.5 0L15.5 17"/><path d="M14 15l1.5-1.5a1.8 1.8 0 0 1 2.5 0l2 2"/></svg>
           </button>
+          <button id="btn-paste" class="ds-ib" type="button" aria-label="복사한 이미지 붙여넣기"
+                  title="복사한 이미지 · 글 붙여넣기 (캡처한 뒤 누르면 바로 붙습니다)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 14l2 2 4-4"/></svg>
+          </button>
           <textarea id="input" rows="1" placeholder="한국어 또는 상대 언어로 입력하세요"></textarea>
           <button id="btn-send" class="ds-btn pri" type="button" aria-label="번역">번역</button>
         </div>
-        <p class="tr-composer__hint tr-desk">Enter 번역 · Shift+Enter 줄바꿈 · 이미지는 끌어다 놓거나 Ctrl+V</p>
+        <p class="tr-composer__hint tr-desk">Enter 번역 · Shift+Enter 줄바꿈 · 이미지는 캡처한 뒤 대화창에 마우스를 올리고 Ctrl+V (또는 붙여넣기 단추)</p>
         <input id="file-image" type="file" accept="image/*" multiple hidden>
       </footer>
     </main>

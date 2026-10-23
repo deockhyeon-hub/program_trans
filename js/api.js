@@ -122,24 +122,146 @@ export const needsInvite = () => request("/api/auth/needs-invite");
 
 /* ---------- 번역 ---------- */
 
-export function translateRemote({ token, model, room, text, userNote = "", images = [], history = [], signal }) {
-  return request("/api/translate", {
-    method: "POST",
-    token,
-    signal,
-    // 이미지 번역은 20~60초까지 걸린다. 번역은 돈이 드는 일이라 끊김 때 한 번만 더 보낸다.
-    timeoutMs: 120000,
-    tries: 2,
-    body: {
-      model,
-      text,
-      // 이미지를 보낼 때만 채워진다. userNote는 "표만 번역해줘" 같은 사용자 지시.
-      userNote,
-      images,
-      room: { lang: room.lang, tone: room.tone, context: room.context, glossary: room.glossary },
-      history,
-    },
+// 번역은 흘려받는다(2026-10-23). 서버가 한 줄에 사건 하나씩 보낸다(NDJSON):
+//   start → meta{direction} → delta{text}… → done{result} → (이미지면) source{text}
+//   도중에 reset(다시 쓰기) 또는 error{status,error,code}
+// done 이 오면 바로 돌려주고, 뒤따라 오는 source(이미지에서 읽은 원문)는 onEvent 로 알린다.
+// 옛 서버처럼 JSON 한 덩어리로 와도 받는다.
+const TRANSLATE_TIMEOUT = 120000; // 전체
+const TRANSLATE_IDLE = 45000;     // 아무 소식 없이 이만큼 지나면 끊긴 것으로 본다
+
+function streamTranslateOnce(body, { token, signal, onEvent }) {
+  return new Promise((resolve) => {
+    const ctl = new AbortController();
+    let settled = false;
+    let started = false;
+    let reason = "";
+    let idleTimer = null;
+    const finish = (out) => {
+      if (settled) return;
+      settled = true;
+      resolve({ ...out, started });
+    };
+    const stopAll = () => {
+      clearTimeout(totalTimer);
+      clearTimeout(idleTimer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const kick = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { reason = "timeout"; ctl.abort(); }, TRANSLATE_IDLE);
+    };
+    const totalTimer = setTimeout(() => { reason = "timeout"; ctl.abort(); }, TRANSLATE_TIMEOUT);
+    const onAbort = () => { reason = "user"; ctl.abort(); };
+    signal?.addEventListener("abort", onAbort);
+    kick();
+
+    const netError = () => {
+      if (reason === "user") return { abort: true };
+      if (reason === "timeout") return { error: new ApiError(MSG_TIMEOUT, 0, "timeout") };
+      return { error: new ApiError(isOffline() ? MSG_OFFLINE : MSG_NETWORK, 0, isOffline() ? "offline" : "network") };
+    };
+
+    (async () => {
+      let res;
+      try {
+        res = await fetch(API_BASE + "/api/translate", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+          signal: ctl.signal,
+        });
+      } catch {
+        stopAll();
+        finish(netError());
+        return;
+      }
+      const type = res.headers.get("content-type") || "";
+      if (!res.ok || !type.includes("ndjson") || !res.body) {
+        let data = null;
+        try { data = await res.json(); } catch { data = null; }
+        stopAll();
+        if (res.ok && data) finish({ result: data });
+        else finish({ error: new ApiError(data?.error || `요청 실패 (${res.status})`, res.status, data?.code || "") });
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      const handle = (ev) => {
+        if (ev.type === "done") {
+          finish({ result: ev.result });
+          // 이미지 원문을 기다릴 때는 조금 더 듣는다.
+          if (!ev.result?.sourcePending) { stopAll(); ctl.abort(); }
+          return;
+        }
+        if (ev.type === "error") {
+          finish({ error: new ApiError(ev.error || "번역에 실패했습니다.", ev.status || 502, ev.code || "") });
+          stopAll();
+          ctl.abort();
+          return;
+        }
+        if (ev.type === "delta" || ev.type === "meta") started = true;
+        if (ev.type === "source") {
+          stopAll();
+          ctl.abort();
+        }
+        try { onEvent?.(ev); } catch { /* 화면 갱신 실패는 번역을 막지 않는다 */ }
+      };
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          kick();
+          buf += dec.decode(value, { stream: true });
+          let k;
+          while ((k = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, k).trim();
+            buf = buf.slice(k + 1);
+            if (!line) continue;
+            let ev;
+            try { ev = JSON.parse(line); } catch { continue; }
+            handle(ev);
+          }
+        }
+      } catch {
+        /* 끊김 또는 우리가 끊은 것 */
+      }
+      stopAll();
+      if (!settled) finish(netError());
+    })();
   });
+}
+
+export async function translateRemote({ token, model, room, text, userNote = "", images = [], history = [], signal, onEvent }) {
+  const body = {
+    model,
+    text,
+    // 이미지를 보낼 때만 채워진다. userNote는 "표만 번역해줘" 같은 사용자 지시.
+    userNote,
+    images,
+    room: { lang: room.lang, tone: room.tone, context: room.context, glossary: room.glossary },
+    history,
+    stream: true,
+  };
+  // 번역은 돈이 드는 일이라 끊김 때 한 번만 더 보낸다.
+  let last = null;
+  for (let i = 0; i < 2; i += 1) {
+    if (i > 0) {
+      if (isOffline()) break;
+      await wait(800);
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    }
+    const out = await streamTranslateOnce(body, { token, signal, onEvent });
+    if (out.abort) throw new DOMException("Aborted", "AbortError");
+    if (out.result) return out.result;
+    last = out.error;
+    if (out.started) onEvent?.({ type: "reset" }); // 반쯤 쓴 글을 지우고 다시
+    if (last.code === "timeout") break; // 오래 기다린 뒤라 또 기다리게 하지 않는다
+    if (last.status !== 0 && last.status !== 503) break; // 끊김 · 503 만 한 번 더
+  }
+  throw last;
 }
 
 /* ---------- 동기화 ---------- */
