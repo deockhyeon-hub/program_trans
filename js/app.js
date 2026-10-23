@@ -275,7 +275,7 @@ function renderMessages({ scroll = true } = {}) {
       h("p", "", `한국어를 입력하면 ${lang}로, ${lang}를 입력하면 한국어로 번역합니다. 직역이 아니라 실제 업무 메일·메신저에서 쓰는 자연스러운 표현으로 다듬습니다.`),
       h("p", "", desktopPointer.matches
         ? "이미지도 됩니다. 메일 캡처·견적서 사진을 끌어다 놓거나 Ctrl+V로 붙여넣으면 속의 글자를 읽어 번역합니다."
-        : "사진도 됩니다. 카톡·Zalo 에서 사진을 길게 눌러 복사한 뒤 입력칸 옆 클립보드 단추를 누르면 바로 붙고, 갤러리에 저장된 캡처는 사진 단추로 고릅니다."),
+        : "사진도 됩니다. 카톡·Zalo 사진을 길게 눌러 「공유 → Biz 번역」 을 고르면 이 앱에 바로 붙습니다. 복사한 사진은 입력칸 옆 클립보드 단추, 갤러리 캡처는 사진 단추로 고릅니다."),
     );
     el.messages.replaceChildren(empty);
     return;
@@ -612,17 +612,27 @@ async function pasteFromClipboard() {
       focusInputOnDesktop();
       return;
     }
+    // 휴대폰: 카톡 등에서 복사한 사진이 브라우저에 안 보이는 경우가 많다(삼성 키보드만 아는 클립보드).
+    // 예전에 복사한 글을 잘못 붙이지 말고 곧바로 사진 고르기를 연다.
+    if (!desktopPointer.matches) {
+      toast("클립보드에서 사진을 찾지 못해 사진 고르기를 엽니다. 카톡 사진은 「공유 → Biz 번역」 이 가장 빠릅니다.");
+      el.fileImage.click();
+      return;
+    }
     if (clip.text) {
       insertAtCursor(el.input, clip.text);
       autosize();
       el.input.focus();
       return;
     }
-    toast("복사한 사진이나 글이 없습니다. 사진을 복사(길게 눌러 복사)한 뒤 눌러 주세요. 갤러리에 저장된 캡처는 옆의 사진 단추로 고르면 됩니다.");
-  } catch {
-    toast(desktopPointer.matches
-      ? "브라우저가 클립보드 읽기를 막았습니다. 입력칸에서 Ctrl+V 로 붙여 주세요."
-      : "클립보드를 읽지 못했습니다. 입력칸을 길게 눌러 「붙여넣기」 하거나, 사진 단추로 골라 주세요.");
+    toast("복사한 사진이나 글이 없습니다. 캡처(Win+Shift+S)하거나 복사한 뒤 눌러 주세요.");
+  } catch (err) {
+    if (!desktopPointer.matches) {
+      toast(`클립보드를 읽지 못해(${err?.name || "오류"}) 사진 고르기를 엽니다. 카톡 사진은 「공유 → Biz 번역」 이 가장 빠릅니다.`);
+      el.fileImage.click();
+      return;
+    }
+    toast(`브라우저가 클립보드 읽기를 막았습니다(${err?.name || "오류"}). 대화창에서 Ctrl+V 로 붙여 주세요.`);
     focusInputOnDesktop();
   }
 }
@@ -1103,8 +1113,37 @@ function startApp() {
   renderMe();
   renderAll();
   autosize();
+  takeSharedFiles();
   // 번역 중에 앱이 닫혔던 것은 첫 동기화 뒤 다시 보낸다.
   runSync({ silent: false }).then(() => retryInterrupted());
+}
+
+// 다른 앱에서 「공유 → Biz 번역」 으로 보낸 사진 · 글 (sw.js 가 맡아 둔 것)
+async function takeSharedFiles() {
+  if (!new URLSearchParams(location.search).has("share")) return;
+  history.replaceState(null, "", location.pathname);
+  try {
+    const cache = await caches.open("biztr-share");
+    const metaRes = await cache.match("shared/meta");
+    if (!metaRes) return;
+    const meta = await metaRes.json();
+    const files = [];
+    for (const name of meta.names || []) {
+      const res = await cache.match(name);
+      if (!res) continue;
+      const blob = await res.blob();
+      files.push(new File([blob], "공유한 이미지", { type: blob.type || "image/png" }));
+    }
+    for (const key of await cache.keys()) await cache.delete(key);
+    if (files.length) await addImageFiles(files);
+    if (meta.text && !files.length) {
+      insertAtCursor(el.input, meta.text);
+      autosize();
+    }
+    if (files.length) toast("공유한 사진을 붙였습니다. 번역을 누르세요.");
+  } catch {
+    toast("공유한 사진을 받지 못했습니다. 사진 단추로 골라 주세요.");
+  }
 }
 
 function init() {
