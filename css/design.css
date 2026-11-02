@@ -49,13 +49,15 @@
   --ds-av-17:#A3248F; --ds-av-18:#5A2D82; --ds-av-19:#3D6B70; --ds-av-20:#7B4F7A;   /* 푸크시아 · 가지 · 청회색 · 자주회색 */
   --ds-av-21:#8C1D40; --ds-av-22:#2F5D1E; --ds-av-23:#6B3A1E; --ds-av-24:#7A4A00;   /* 와인 · 숲 · 초콜릿 · 구리 — 흰 글자 대비 5.9~9.9 · 모든 색끼리 ΔE 16 이상 */
   --ds-av-0:#C9CDD3;   /* 퇴사 · 계정 없는 이름 = 회색 (10-17) */
-  /* 사람 이름 꼬리표 24색 (3차 14절 · 10-17 17~24 · 0 = 회색 — 성까지 전체 이름 · 연한 바탕 + 진한 글자, 대비 4.87~7.14 · 색 번호 배정은 5절 그대로). 사람 = --ds-who-* 만, 분류 = --ds-cat-* 만 */
-  --ds-who-1-fg:#3B4CCA; --ds-who-1-bg:#E7EAF9; --ds-who-2-fg:#1768B2; --ds-who-2-bg:#E3EEF8; --ds-who-3-fg:#0A6C94; --ds-who-3-bg:#E2EFF5; --ds-who-4-fg:#0A7064; --ds-who-4-bg:#E2F0EF;
-  --ds-who-5-fg:#247434; --ds-who-5-bg:#E6F1E8; --ds-who-6-fg:#4A6E0A; --ds-who-6-bg:#EBF1E2; --ds-who-7-fg:#8B5D00; --ds-who-7-bg:#F4EEE0; --ds-who-8-fg:#B63C0D; --ds-who-8-bg:#FAE9E2;
-  --ds-who-9-fg:#AE432C; --ds-who-9-bg:#F6E9E6; --ds-who-10-fg:#BA2458; --ds-who-10-bg:#F8E5EB; --ds-who-11-fg:#9C36B5; --ds-who-11-bg:#F3E7F6; --ds-who-12-fg:#6741D9; --ds-who-12-bg:#EDE8FA;
-  --ds-who-13-fg:#7A5A48; --ds-who-13-bg:#EFEBE9; --ds-who-14-fg:#454F5B; --ds-who-14-bg:#E9EAEB; --ds-who-15-fg:#67671E; --ds-who-15-bg:#EDEDE4; --ds-who-16-fg:#1F4E79; --ds-who-16-bg:#E4EAEF;
-  --ds-who-17-fg:#A3248F; --ds-who-17-bg:#F5E7F3; --ds-who-18-fg:#5A2D82; --ds-who-18-bg:#EDE8F1; --ds-who-19-fg:#3D6B70; --ds-who-19-bg:#EAEFEF; --ds-who-20-fg:#7B4F7A; --ds-who-20-bg:#F0ECF0;
-  --ds-who-21-fg:#8C1D40; --ds-who-21-bg:#F2E6EA; --ds-who-22-fg:#2F5D1E; --ds-who-22-bg:#E8EDE6; --ds-who-23-fg:#6B3A1E; --ds-who-23-bg:#EFE9E6; --ds-who-24-fg:#7A4A00; --ds-who-24-bg:#F0EBE3;
+  /* 사람 이름 꼬리표 24색 (3차 14절 · 10-17 17~24 · 0 = 회색 — 성까지 전체 이름 · 연한 바탕 + 진한 글자, 대비 4.87~8.31 · 색 번호 배정은 5절). 사람 = --ds-who-* 만, 분류 = --ds-cat-* 만
+     WHOCOLOR_1030 (대표 «다른 담당자인데 색이 같아»): 닮음 거리(글자 OKLab + 2×바탕) 팔레트 어느 두 색도 ≥ 0.08 · 재직자끼리 ≥ 0.09.
+     ★ 값을 바꾸면 python -X utf8 tools/whodist.py 로 재고, --write 로 program_prod src/server/docno.py 의 거리 표도 다시 만든다(서버가 이 표로 색을 고름) */
+  --ds-who-1-fg:#3B4CCA; --ds-who-1-bg:#E7EAF9; --ds-who-2-fg:#1768B2; --ds-who-2-bg:#E3EEF8; --ds-who-3-fg:#0C6383; --ds-who-3-bg:#E5F0F5; --ds-who-4-fg:#0A7064; --ds-who-4-bg:#E2F0EF;
+  --ds-who-5-fg:#247434; --ds-who-5-bg:#E6F1E8; --ds-who-6-fg:#4B5F43; --ds-who-6-bg:#ECEFEA; --ds-who-7-fg:#8B5D00; --ds-who-7-bg:#F4EEE0; --ds-who-8-fg:#B63C0D; --ds-who-8-bg:#FAE9E2;
+  --ds-who-9-fg:#702E42; --ds-who-9-bg:#F7EAED; --ds-who-10-fg:#BA2458; --ds-who-10-bg:#F8E5EB; --ds-who-11-fg:#9C36B5; --ds-who-11-bg:#F3E7F6; --ds-who-12-fg:#6C41D7; --ds-who-12-bg:#ECEAFD;
+  --ds-who-13-fg:#7A5A48; --ds-who-13-bg:#EFEBE9; --ds-who-14-fg:#454F5B; --ds-who-14-bg:#E9EAEB; --ds-who-15-fg:#676815; --ds-who-15-bg:#EBECE4; --ds-who-16-fg:#1C4B7A; --ds-who-16-bg:#E6ECF2;
+  --ds-who-17-fg:#A32189; --ds-who-17-bg:#F8E7F2; --ds-who-18-fg:#5A2D82; --ds-who-18-bg:#EDE8F1; --ds-who-19-fg:#4A6B74; --ds-who-19-bg:#EAEFF0; --ds-who-20-fg:#7B4F7A; --ds-who-20-bg:#F0ECF0;
+  --ds-who-21-fg:#8C1D40; --ds-who-21-bg:#F2E6EA; --ds-who-22-fg:#2F5D1E; --ds-who-22-bg:#E8EDE6; --ds-who-23-fg:#6A391E; --ds-who-23-bg:#F0E9E6; --ds-who-24-fg:#7A4A00; --ds-who-24-bg:#F0EBE3;
   --ds-who-0-fg:#6B7280; --ds-who-0-bg:#EEF0F2;   /* 퇴사 · 계정 없는 이름 = 회색 꼬리표 (10-17) */
   /* 팝업 폭 4단계 */
   --ds-w-modal-sm:440px; --ds-w-modal-md:720px; --ds-w-modal-lg:960px; --ds-w-modal-xl:1200px;
