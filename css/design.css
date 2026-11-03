@@ -17,6 +17,11 @@
   --ds-r-control:8px; --ds-r-card:12px; --ds-r-modal:12px;   /* 2차: 카드 · 표 둘레 8 → 12, 팝업 10 → 12 (14절) */
   /* 높이 */
   --ds-h-control:36px; --ds-h-control-sm:30px; --ds-h-chip:32px; --ds-h-check:16px;
+  /* 입력 부품 한 높이 (CTRLSHAPE_1103 · 대표 11-03 «알약 모양 · 크기가 달라 같은 1행도 행 높이가 다르다» · CLAUDE 공통 규칙 23):
+     상자 입력(쌓인 폼 · 필터 줄 · 단독) = --ds-h-input 하나(단추와 같은 36) · 격자 폼 줄 = --ds-row-form · 격자 · 표 칸 안 부품 = 칸 높이(줄 − 줄 선 1).
+     전(11-03 잰 것): 같은 창 안에 36(.ds-input) · 32(.ds-chip 단위) · 30(7-8 덮개) · 28(7-8b 상자)이 섞임 */
+  --ds-h-input:var(--ds-h-control); --ds-row-form:36px; --ds-row-form-s:32px;
+  --ds-h-cell:calc(var(--ds-row-form) - 1px); --ds-h-cell-s:calc(var(--ds-row-s) - 1px);
   /* 달력 창 (modules/dsdate.js · 대표 10-26 «달력이 조금 크다 · 모든 달력 줄이고 새 달력도 같게») — 달력은 dsdate 하나, 크기는 이 값만.
      폭 282 = 날짜 칸 36 × 7 + 칸 사이 2 × 6 + 안쪽 8 × 2 + 테두리 2. 전(10-06): 폭 328 · 칸 42×38 · 숫자 14 · 제목 16 · 위 단추 34×30 · 아래 단추 30 */
   --ds-cal-w:282px; --ds-cal-pad:8px; --ds-cal-gap:2px; --ds-cal-cell-h:30px;
@@ -304,10 +309,10 @@
 .ds-steps li.now{color:var(--ds-fg-neutral);font-weight:var(--ds-fw-semibold)}
 .ds-steps li.now .c{background:var(--ds-fg-progress);border-color:var(--ds-fg-progress);color:var(--ds-fg-on-solid)}
 
-/* ── 입력 · 선택 상자 · 체크칸: 기본 36(2차) · 표 안 30 ── */
-.ds-input,.ds-select{height:var(--ds-h-control);padding:0 var(--ds-sp-3);box-sizing:border-box;font:var(--ds-fw-regular) var(--ds-fs-14)/1.4 var(--ds-font);
+/* ── 입력 · 선택 상자 · 체크칸: 상자 입력 = 높이 --ds-h-input(36) 하나 · 모서리 --ds-r-control · 칸 폭 안 (CTRLSHAPE_1103) — 격자 폼 · 표 칸 안은 아래 «칸 = 입력칸» ── */
+.ds-input,.ds-select{height:var(--ds-h-input);max-width:100%;padding:0 var(--ds-sp-3);box-sizing:border-box;font:var(--ds-fw-regular) var(--ds-fs-14)/1.4 var(--ds-font);
   color:var(--ds-fg-neutral);background:var(--ds-bg-layer-default);border:1px solid var(--ds-stroke-control);border-radius:var(--ds-r-control)}
-textarea.ds-input{height:auto;min-height:calc(var(--ds-h-control) * 2);padding:var(--ds-sp-2) var(--ds-sp-3);line-height:var(--ds-lh-body)}
+textarea.ds-input{height:auto;min-height:calc(var(--ds-h-input) * 2);padding:var(--ds-sp-2) var(--ds-sp-3);line-height:var(--ds-lh-body)}
 .ds-input::placeholder{color:var(--ds-fg-neutral-subtle)}
 .ds-input:hover,.ds-select:hover{border-color:var(--ds-fg-disabled)}
 .ds-input:focus,.ds-select:focus{outline:0;border-color:var(--ds-stroke-focus);box-shadow:var(--ds-focus-ring)}
@@ -550,6 +555,7 @@ button.ds-stat:focus-visible{outline:0;box-shadow:var(--ds-focus-ring)}
 input.ds-date{padding-right:30px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2399A1AF' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E")!important;
   background-repeat:no-repeat!important;background-position:right 9px center!important;background-size:15px 15px!important;font-variant-numeric:tabular-nums;cursor:pointer}
 input.ds-date[aria-invalid="true"]{border-color:var(--ds-dot-critical)}
+:where(input.ds-date){height:var(--ds-h-input);max-width:100%;box-sizing:border-box;padding-left:var(--ds-sp-3);border:1px solid var(--ds-stroke-control);border-radius:var(--ds-r-control);background-color:var(--ds-bg-layer-default);font:var(--ds-fw-regular) var(--ds-fs-14)/1.4 var(--ds-font);color:var(--ds-fg-neutral)}   /* CTRLSHAPE_1103: class 없는 날짜 칸도 .ds-input 과 같은 상자 */
 .ds-dpop{position:fixed;z-index:var(--ds-z-popover);width:var(--ds-cal-w);max-width:calc(100vw - 16px);padding:var(--ds-cal-pad);box-sizing:border-box;background:var(--ds-bg-layer-default);border:1px solid var(--ds-stroke-neutral);
   border-radius:var(--ds-r-card);box-shadow:var(--ds-shadow-modal);font:var(--ds-fw-regular) var(--ds-cal-fs)/1.4 var(--ds-font);color:var(--ds-fg-neutral)}
 .ds-dpop .hd{display:flex;align-items:center;gap:var(--ds-sp-1);margin-bottom:6px}
@@ -575,7 +581,7 @@ input.ds-date[aria-invalid="true"]{border-color:var(--ds-dot-critical)}
 
 /* ── 고르는 칸 dsSelect (3차 12절) — 닫힘: 높이 36(표 안 30) · 모서리 8 · 고른 것을 표와 같은 부품으로 + ✕ + ⌄ / 펼침: 떠 있는 상자 · 항목 32 · 고른 항목 ✓ + 굵게 ── */
 select.ds-sel-native{display:none!important}   /* 값 · change 는 그대로 — 화면에는 dsSelect 단추만 (absolute 로 두면 표 안 select 가 화면 밖으로 나가 가로 넘침이 생겼음) */
-.ds-sel{display:inline-flex;align-items:center;gap:var(--ds-sp-2);height:var(--ds-h-control);min-width:120px;max-width:100%;padding:0 var(--ds-sp-2) 0 var(--ds-sp-3);box-sizing:border-box;
+.ds-sel{display:inline-flex;align-items:center;gap:var(--ds-sp-2);height:var(--ds-h-input);min-width:120px;max-width:100%;padding:0 var(--ds-sp-2) 0 var(--ds-sp-3);box-sizing:border-box;
   background:var(--ds-bg-layer-default);border:1px solid var(--ds-stroke-control);border-radius:var(--ds-r-control);cursor:pointer;text-align:left;
   font:var(--ds-fw-regular) var(--ds-fs-14)/1 var(--ds-font);color:var(--ds-fg-neutral);vertical-align:middle}
 .ds-sel.sm{height:var(--ds-h-control-sm);font-size:var(--ds-fs-13)}
@@ -697,18 +703,15 @@ td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭
 .ds-acct__hd .sub{font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle)}
 .ds-acct button svg{width:16px;height:16px;color:var(--ds-fg-neutral-subtle)}
 /* 창 안 입력 칸 · 체크 줄 */
-/* 7-8(10-16): .ds-field = 셀 줄 «라벨 칸 | 값 칸» — 라벨 왼쪽 고정폭 · 모든 칸 옅은 선 · 줄 36 · 입력칸은 칸을 채우고 테두리는 포커스 때만 */
-.ds-field{display:grid;grid-template-columns:var(--ds-kv-label,112px) minmax(0,1fr);gap:0;align-items:center;min-width:0;min-height:36px;margin:0;border:1px solid var(--ds-form-line);border-top:0;background:var(--ds-bg-layer-default)}
+/* 7-8(10-16): .ds-field = 셀 줄 «라벨 칸 | 값 칸» — 라벨 왼쪽 고정폭 · 모든 칸 옅은 선 · 줄 --ds-row-form · 칸 = 입력칸(CTRLSHAPE_1103) */
+.ds-field{display:grid;grid-template-columns:var(--ds-kv-label,112px) minmax(0,1fr);gap:0;align-items:center;min-width:0;min-height:var(--ds-row-form);box-sizing:border-box;margin:0;border:1px solid var(--ds-form-line);border-top:0;background:var(--ds-bg-layer-default)}
 .ds-field:first-child,.ds-modal__body > .ds-field:first-of-type{border-top:1px solid var(--ds-form-line);border-radius:var(--ds-r-card) var(--ds-r-card) 0 0}
 .ds-field:last-child{border-radius:0 0 var(--ds-r-card) var(--ds-r-card)}
 .ds-modal__grid > .ds-field{border-left:0;border-right:0;border-radius:0}
 .ds-modal__grid > .ds-field:first-child{border-top:0}
 .ds-field > span{align-self:stretch;display:flex;align-items:center;gap:4px;padding:0 var(--ds-sp-3);background:var(--ds-form-label-bg);border-right:1px solid var(--ds-form-line);font-size:var(--ds-fs-13);font-weight:var(--ds-fw-regular);color:var(--ds-form-label-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ds-field > span .req{color:var(--ds-fg-critical)}
-.ds-field > .ds-input,.ds-field > .ds-select,.ds-field > input:not([type=checkbox]):not([type=radio]):not([type=file]),.ds-field > select,.ds-field > .ds-sel,.ds-field > .ds-date{margin:4px 6px;height:28px;min-height:0;min-width:0;border:1px solid var(--ds-form-box-line);border-radius:4px;background:var(--ds-bg-layer-default);box-shadow:none;font-size:var(--ds-fs-13);padding:0 var(--ds-sp-2);box-sizing:border-box}
-.ds-field > .ds-input:hover,.ds-field > .ds-select:hover,.ds-field > input:hover,.ds-field > select:hover{border-color:var(--ds-stroke-control)}
-.ds-field > .ds-input:focus,.ds-field > .ds-select:focus,.ds-field > input:focus,.ds-field > select:focus,.ds-field > .ds-sel:focus-visible{border-color:var(--ds-stroke-focus);box-shadow:var(--ds-focus-ring);background:var(--ds-bg-layer-default);outline:0}
-.ds-field > textarea{margin:4px 6px;min-height:72px;border:1px solid var(--ds-form-box-line);border-radius:4px;padding:6px var(--ds-sp-2);font:inherit;font-size:var(--ds-fs-13);resize:vertical;min-width:0}
+/* (값 칸 안 입력 = 아래 CTRLSHAPE_1103 «칸 = 입력칸» — 전: 28 상자 · margin 4px 6px · 모서리 4) */
 .ds-field > .ds-help,.ds-field > small,.ds-field > .hint{grid-column:2;padding:0 var(--ds-sp-2) 6px;margin:-2px 0 0;font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle)}
 .ds-field > .pair,.ds-field > .ds-pair{display:flex;align-items:center;gap:var(--ds-sp-1);min-width:0;padding:0 var(--ds-sp-1)}
 .ds-field > .pair > *,.ds-field > .ds-pair > *{flex:1 1 0;min-width:0}
@@ -790,17 +793,16 @@ td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭
    한 덩어리 2~3칸 = <div class="pair">…</div> · 구역 머리 = <div class="ds-kv-sec">1 기본 정보</div> · 보기 2열 = .cols2 · 라벨 폭 .narrow 96 / .wide 136 */
 .ds-kv{display:grid;grid-template-columns:var(--ds-kv-label,112px) minmax(0,1fr);border:1px solid var(--ds-rule);border-bottom:0;border-radius:var(--ds-r-card);overflow:hidden;background:var(--ds-bg-layer-default);font:var(--ds-fw-regular) var(--ds-fs-13)/1.4 var(--ds-font);color:var(--ds-fg-neutral)}
 .ds-kv.narrow{--ds-kv-label:96px}.ds-kv.wide{--ds-kv-label:136px}
-.ds-kv > *{min-height:36px;box-sizing:border-box;border-bottom:1px solid var(--ds-rule);display:flex;align-items:center;min-width:0;margin:0}
-.ds-kv.compact > *{min-height:32px}
+.ds-kv > *{min-height:var(--ds-row-form);box-sizing:border-box;border-bottom:1px solid var(--ds-rule);display:flex;align-items:center;min-width:0;margin:0}
+.ds-kv.compact > *{min-height:var(--ds-row-form-s)}
 .ds-kv > label,.ds-kv > dt,.ds-kv > .k{background:var(--ds-band);color:var(--ds-fg-neutral-muted);padding:0 var(--ds-sp-3);border-right:1px solid var(--ds-rule);font-size:var(--ds-fs-13);font-weight:var(--ds-fw-medium);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ds-kv > label .req,.ds-kv > dt .req{color:var(--ds-fg-critical);margin-left:2px}
 .ds-kv > label small,.ds-kv > dt small{font-weight:var(--ds-fw-regular);color:var(--ds-fg-neutral-subtle);margin-left:4px}
 .ds-kv > div,.ds-kv > dd{padding:0 var(--ds-sp-2);gap:var(--ds-sp-2)}
 .ds-kv > div.txt,.ds-kv > dd{padding:0 var(--ds-sp-3)}
-.ds-kv > div > input:not([type=checkbox]):not([type=radio]):not([type=file]),.ds-kv > div > select,.ds-kv > div > .ds-sel,.ds-kv > div > .ds-date,.ds-kv .pair > input,.ds-kv .pair > select{flex:1 1 auto;min-width:0;height:30px;border:1px solid transparent;background:transparent;padding:0 var(--ds-sp-2);font:inherit;color:inherit;border-radius:var(--ds-r-control);box-sizing:border-box}
-.ds-kv > div > input:focus,.ds-kv > div > select:focus,.ds-kv .pair > input:focus,.ds-kv .pair > select:focus{outline:0;border-color:var(--ds-stroke-focus);box-shadow:var(--ds-focus-ring);background:var(--ds-bg-layer-default)}
+.ds-kv > div > :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,.ds-sel,.ds-date),.ds-kv .pair > :is(input,select,.ds-sel){flex:1 1 auto;min-width:0}   /* 모양 = 아래 CTRLSHAPE_1103 */
 .ds-kv > div > input[readonly],.ds-kv > div > input:disabled{color:var(--ds-fg-neutral-muted)}
-.ds-kv > div > textarea{flex:1 1 auto;min-height:72px;margin:6px 0;border:1px solid var(--ds-rule);border-radius:var(--ds-r-control);padding:6px var(--ds-sp-2);font:inherit;color:inherit;resize:vertical;box-sizing:border-box}
+.ds-kv > div > textarea{flex:1 1 auto;resize:vertical}
 .ds-kv > div.tall{align-items:flex-start;padding:6px var(--ds-sp-2)}
 .ds-kv .pair{display:flex;align-items:center;gap:var(--ds-sp-1);flex:1 1 auto;min-width:0}
 .ds-kv .pair > *{flex:1 1 0;min-width:0}
@@ -817,7 +819,7 @@ td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭
 
 /* ── 설명글 접기(대표 10-16): dsui hintFold 가 붙인 안내 · 설명 글은 숨긴다 · 바닥 「설명 보기」 스위치 ── */
 [data-ds-hintx]{display:none!important}
-.ds-hintsw{margin-left:auto;padding:2px 10px;border:1px solid var(--ds-rule);border-radius:var(--ds-r-pill);background:var(--ds-bg-layer-default);color:var(--ds-fg-neutral-subtle);font:var(--ds-fw-regular) var(--ds-fs-12)/1.4 var(--ds-font);cursor:pointer}
+.ds-hintsw{margin-left:auto;padding:2px 10px;border:1px solid var(--ds-rule);border-radius:var(--ds-r-control);background:var(--ds-bg-layer-default);color:var(--ds-fg-neutral-subtle);font:var(--ds-fw-regular) var(--ds-fs-12)/1.4 var(--ds-font);cursor:pointer}
 .ds-hintsw:hover{color:var(--ds-fg-neutral);border-color:var(--ds-rule-hard)}
 .ds-hintsw[aria-pressed="true"]{color:var(--ds-blue-2);border-color:var(--ds-blue);background:var(--ds-blue-soft)}
 .foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -829,15 +831,45 @@ td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭
 .ds-kv:has(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) > *{border-bottom-color:var(--ds-form-line)}
 .ds-kv:has(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) > :is(label,dt,.k){background:var(--ds-form-label-bg);color:var(--ds-form-label-fg);border-right-color:var(--ds-form-line);font-weight:var(--ds-fw-regular)}
 .ds-kv:has(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) > .ds-kv-sec{background:var(--ds-form-calc-bg);color:var(--ds-form-total);box-shadow:inset 3px 0 0 var(--ds-form-mark)}
-.ds-kv > div > :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]),select,.ds-sel,.ds-date),.ds-kv .pair > :is(input:not([type=checkbox]):not([type=radio]),select,.ds-sel){height:28px;min-height:0;margin:4px 0;border:1px solid var(--ds-form-box-line);border-radius:4px;background:var(--ds-bg-layer-default);box-shadow:none}
-.ds-kv > div > :is(input,select,.ds-sel):hover,.ds-kv .pair > :is(input,select,.ds-sel):hover{border-color:var(--ds-stroke-control)}
-.ds-kv > div > :is(input,select,textarea):focus,.ds-kv .pair > :is(input,select):focus,.ds-kv .ds-sel:is(:focus-visible,[aria-expanded="true"]){outline:0;border-color:var(--ds-stroke-focus);box-shadow:var(--ds-focus-ring)}
-.ds-kv > div > textarea{border-color:var(--ds-form-box-line);border-radius:4px}
-.ds-kv > div > :is(input[readonly],input:disabled,select:disabled),.ds-field > :is(input[readonly],input:disabled,select:disabled){background:var(--ds-form-calc-bg);color:var(--ds-form-total)}
+/* (7-8b 28 상자 · 포커스 · 읽기만 바탕 → 아래 CTRLSHAPE_1103 — 대표 11-03 «엑셀처럼 셀이 딱 나뉘는 게 깔끔») */
 /* 폭 표시(data-f78) — 조각 규칙의 min-width:0!important 보다 앞서게 :is(body,#f78x) */
 :is(body,#f78x) [data-f78="num"]{width:120px!important;max-width:120px!important;flex:0 0 120px!important;justify-self:start!important;text-align:right!important;font-variant-numeric:tabular-nums}
 :is(body,#f78x) [data-f78="date"]{width:140px!important;max-width:140px!important;flex:0 0 140px!important;justify-self:start!important;text-align:left!important}
 :is(body,#f78x) [data-f78="sel"]{width:auto!important;min-width:120px!important;max-width:calc(100% - 12px)!important;flex:0 0 auto!important;justify-self:start!important}
+
+/* ── CTRLSHAPE_1103 입력 부품 한 모양 (대표 11-03 «알약 모양 · 크기가 달라 같은 1행도 행 높이가 다르다 · 엑셀처럼 셀이 딱 나뉘는 게 깔끔» · CLAUDE 공통 규칙 23 · 화면규칙 5절 «입력 부품» · 7-8 ⑫ · 6절 12)
+   부품 = input(글 · 숫자 · 날짜) · select · dsSelect(.ds-sel) · textarea · 단위/종류 고르기(.ds-seg).
+   (가) 칸 선이 있는 «라벨 | 값» 격자 폼 = 칸이 입력칸: 테두리 · 둥근 모서리 · 바탕 없음 · 높이 = 칸(--ds-h-cell = 줄 --ds-row-form − 줄 선 1) ·
+        마우스 = 옅은 바탕 · 포커스 = 칸 안쪽 파란 고리 · 읽기만 = 계산칸 바탕 · 고르기 ▾ · 달력 그림은 늘 보임(줄이 적은 폼은 칸 종류가 보여야 함 — 줄 많은 표는 CELLFLAT 대로 마우스 때만). 표 칸 안도 같은 눈(CELLFLAT_1026 을 모든 표로 — 높이 = --ds-h-cell-s).
+   (나) 칸 선 없는 쌓인 폼 · 필터 줄 · 단독 = 테두리 상자 하나: --ds-h-input(36) · --ds-r-control · max-width:100% (.ds-input · .ds-sel · input.ds-date).
+   (다) 알약(둥근 끝) = 상태 표시만(.ds-st · .ds-badge). 단위(ml · g) · 종류 고르기 = .ds-seg — .ds-chip(걸러 보기) · 알약으로 그리지 않는다.
+   (라) 한 줄 높이 = 토큰 하나: 목록 표 --ds-row-l · 입력 표 --ds-row-s · 격자 폼 --ds-row-form. 여러 줄 글상자만 예외.
+   특이도: 칸 = :where() · 부품 = :is(클래스) → (0,1,0) — 부품 기본(.ds-input 36 상자)만 이긴다. 화면 덮개(:is(body,#f78x) !important · 7-8 덮개)가 남은 곳은 화면 갈래가 걷는다(reports/control-audit.md).
+   상자를 남길 표 · 격자 = data-ds-box. 옛 격자 이름은 dsui formBoxSel(7-8b)과 같은 목록. */
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, table *, [data-popover] *, [data-ds-box] *)){height:var(--ds-h-cell);min-height:0;max-width:100%;margin:0;padding:0 var(--ds-sp-2);box-sizing:border-box;
+  border:1px solid transparent;border-radius:0;background-color:transparent;box-shadow:none;font-size:var(--ds-fs-13);color:var(--ds-fg-neutral);line-height:1.4}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) :is(.ds-input, textarea):where(textarea:not([rows="1"])){height:auto;min-height:calc(var(--ds-row-form) * 2);padding:var(--ds-sp-2);line-height:var(--ds-lh-body);resize:vertical}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, table *, [data-popover] *, [data-ds-box] *)):where(:not([readonly], :disabled)):hover{background-color:var(--ds-bg-hover)}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, table *, [data-popover] *, [data-ds-box] *)):is(:focus, :focus-visible),:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) .ds-sel[aria-expanded="true"]{outline:0;border-color:transparent;background-color:var(--ds-bg-layer-default);box-shadow:inset 0 0 0 1.5px var(--ds-stroke-focus)}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg) :is(input, select, .ds-sel, textarea):is([readonly], :disabled){background-color:var(--ds-form-calc-bg);color:var(--ds-form-total)}
+/* 표 칸 안 (6절 12 · 규칙 14): 이름 붙은 입력 표(CELLFLAT_1026)만이 아니라 모든 표 — 부품 = 칸 높이(입력 표 줄 S32 − 1) · 줄을 밀어 올리지 않음 */
+:where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, [data-popover] *, [data-ds-box] *)){height:var(--ds-h-cell-s);min-height:0;max-width:100%;margin:0;box-sizing:border-box;border-color:transparent;border-radius:0;background-color:transparent;box-shadow:none}
+:where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td :is(.ds-input, textarea):where(textarea:not([rows="1"])){height:auto;min-height:var(--ds-h-cell-s)}
+:where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td:has(> :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, [data-popover] *, [data-ds-box] *))):hover{background-color:var(--ds-bg-hover)}
+:where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td :is(.ds-input, .ds-select, .ds-sel, .ds-date, input, select, textarea):where(:not([type=checkbox], [type=radio], [type=hidden], [type=file], [type=button], [type=submit], [type=color], [type=range], .ds-sel-native, [data-popover] *, [data-ds-box] *)):is(:focus, :focus-visible){outline:0;box-shadow:inset 0 0 0 1.5px var(--ds-stroke-focus);background-color:var(--ds-bg-layer-default)}
+/* (다) 단위 · 종류 고르기 = 칸 안 글자 고르기 .ds-seg — <span class="ds-seg" role="group"><button type="button" aria-pressed="true">ml</button><button type="button" aria-pressed="false">g</button></span>
+   고른 것 = 진한 글자 600 + 강조색 밑줄 2(바탕 칠 · 알약 없음). 단독은 36 상자 하나, 격자 · 표 칸 안은 평평(앞 칸과 가는 선). */
+.ds-seg{display:inline-flex;align-items:stretch;flex:0 0 auto;height:var(--ds-h-input);max-width:100%;box-sizing:border-box;border:1px solid var(--ds-stroke-control);border-radius:var(--ds-r-control);background:var(--ds-bg-layer-default);overflow:hidden;vertical-align:middle}
+.ds-seg > button{flex:0 0 auto;min-width:36px;height:auto;margin:0;padding:0 var(--ds-sp-3);border:0;border-left:1px solid var(--ds-stroke-neutral);border-radius:0;background:transparent;box-shadow:none;
+  font:var(--ds-fw-regular) var(--ds-fs-13)/1 var(--ds-font);color:var(--ds-fg-neutral-subtle);cursor:pointer}
+.ds-seg > button:first-child{border-left:0}
+.ds-seg > button:hover{background:var(--ds-bg-hover);color:var(--ds-fg-neutral)}
+.ds-seg > button:is([aria-pressed="true"], [aria-checked="true"]){color:var(--ds-fg-neutral);font-weight:var(--ds-fw-semibold);box-shadow:inset 0 -2px 0 var(--ds-fg-accent)}
+.ds-seg > button:focus-visible{outline:0;box-shadow:inset 0 0 0 1.5px var(--ds-stroke-focus)}
+.ds-seg > button:is([aria-pressed="true"], [aria-checked="true"]):focus-visible{box-shadow:inset 0 0 0 1.5px var(--ds-stroke-focus),inset 0 -2px 0 var(--ds-fg-accent)}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg, :where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td) .ds-seg{height:var(--ds-h-cell);border:0;border-left:1px solid var(--ds-form-line);border-radius:0;background:transparent}
+:where(:where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td) .ds-seg{height:var(--ds-h-cell-s)}
+:where(.ds-kv > div, .ds-kv > dd, .ds-kv .pair, .ds-field, .ds-modal__grid > *, .fm > div, .ec-form .ec-f, .ec-form > label, .admform > label, .ps-z .ps-zr > .v, .ct-f, .co-f, .ct-kv > div, .flwnew > label, .exgrid > div, #smqEditB .smqgrid > div, .qtf > label, #igNew .nwf, .form-head .fh-in, .bpform > label, #mlModal .mlform > label, #idDlg .iddlg__alg, :where(table:not([class*="paper"], .qp, [class*="print"], [data-ds-box])) > tbody > tr > td) .ds-seg:first-child{border-left:0}
 
 /* ── 머리 · 탭 메뉴 톤 (대표 10-18 «시안 2번») — 화면 제목 앞 강조색 막대 · 위치 표시 강조색 · 고른 탭 = 강조색 글 + 밑줄 ── */
 .scrhd .crumb,.ds-page__hd[data-crumb]::before{color:var(--ds-fg-accent)!important}
