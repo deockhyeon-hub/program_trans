@@ -66,8 +66,9 @@
   --ds-who-17-fg:#A32189; --ds-who-17-bg:#F8E7F2; --ds-who-18-fg:#5A2D82; --ds-who-18-bg:#EDE8F1; --ds-who-19-fg:#4A6B74; --ds-who-19-bg:#EAEFF0; --ds-who-20-fg:#7B4F7A; --ds-who-20-bg:#F0ECF0;
   --ds-who-21-fg:#8C1D40; --ds-who-21-bg:#F2E6EA; --ds-who-22-fg:#2F5D1E; --ds-who-22-bg:#E8EDE6; --ds-who-23-fg:#6A391E; --ds-who-23-bg:#F0E9E6; --ds-who-24-fg:#7A4A00; --ds-who-24-bg:#F0EBE3;
   --ds-who-0-fg:#6B7280; --ds-who-0-bg:#EEF0F2;   /* 퇴사 · 계정 없는 이름 = 회색 꼬리표 (10-17) */
-  /* 팝업 폭 4단계 */
-  --ds-w-modal-sm:440px; --ds-w-modal-md:720px; --ds-w-modal-lg:960px; --ds-w-modal-xl:1200px;
+  /* 팝업 폭 4단계 — POPRZ_1104(대표 11-03 «팝업이 작다»): md · lg 는 큰 화면에서 화면 폭을 따라 커진다(1440 은 그대로 720 · 960,
+     1920 에서 768 · 998, 2560 에서 960 · 1280). 전에는 고정 px 라 대표 화면(폭 2000+)에서 작성 창이 화면의 28% 였다. */
+  --ds-w-modal-sm:440px; --ds-w-modal-md:clamp(720px, 40vw, 960px); --ds-w-modal-lg:clamp(960px, 52vw, 1280px); --ds-w-modal-xl:1200px;
   /* 그림자 4단계 + 포커스 고리(색은 테마의 --ds-focus-ring) */
   --ds-shadow-none:none; --ds-shadow-card:0 1px 2px rgba(0,0,0,.04);
   --ds-shadow-menu:0 8px 24px rgba(0,0,0,.12); --ds-shadow-modal:0 18px 56px rgba(0,0,0,.22);
