@@ -506,3 +506,6 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 
 - [ ] 대표님 휴대폰: 홈 화면의 Biz 번역 앱 지우고 → 크롬에서 주소 열기 → 「앱 설치」 → 카톡 사진 길게 눌러 「공유」 → 목록에서 「Biz 번역」
 - [ ] 크롬이 `kAndroidMediaInsertion` 을 기본으로 켜면 키보드 칩도 저절로 될 수 있음 — 그때 다시 확인
+
+### 12 · 11-04 11:49 · 토큰 apply: 팝업 폭 md · lg 큰 화면 비례 (design DEVLOG 104 · POPRZ_1104 · fe45bda)
+- --ds-w-modal-md = clamp(720px, 40vw, 960px) · -lg = clamp(960px, 52vw, 1280px). 번역 앱 화면은 바뀐 것 없음(이 토큰을 쓰는 창 없음). 화면 빌드 없음.
