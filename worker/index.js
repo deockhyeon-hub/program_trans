@@ -1,11 +1,11 @@
 // Biz 번역 백엔드 (Cloudflare Worker + D1)
 //  1) 회원가입 · 로그인 · 세션 관리
-//  2) Anthropic API 키를 서버 비밀값으로 숨긴 번역 프록시
+//  2) 번역 AI 키를 서버 비밀값으로 숨긴 번역 프록시 — 기본 Google Gemini(2026-11-06~), 예비 Anthropic Claude
 //  3) 채팅방 · 대화 기록 기기 간 동기화
 //
 // 필요한 바인딩
 //  - D1 데이터베이스: DB
-//  - 시크릿: ANTHROPIC_API_KEY
+//  - 시크릿: GEMINI_API_KEY (기본 번역) · ANTHROPIC_API_KEY (예비 — Gemini 가 429 · 5xx · 시간 초과일 때 한 번)
 //  - (선택) 변수: ALLOWED_ORIGINS  쉼표로 구분한 허용 주소
 
 const DEFAULT_ORIGINS = [
@@ -14,12 +14,19 @@ const DEFAULT_ORIGINS = [
 "http://127.0.0.1:8765",
 ];
 
-const ALLOWED_MODELS = new Set(["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]);
+// 번역 모델 (2026-11-06 대표 결정 「그냥 제미나이로」). Claude 3종은 예비로 남긴다 — 되돌리기 = 아래 DEFAULT_MODEL 한 줄.
+const GEMINI_FLASH = "gemini-3.8-flash";
+const GEMINI_PRO = "gemini-3.1-pro-preview";
+const ALLOWED_MODELS = new Set([GEMINI_FLASH, GEMINI_PRO, "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]);
 // 이미지 첨부: Anthropic이 받는 형식과 크기 제한
 const MAX_IMAGES = 4;
 const MAX_IMAGE_B64 = 5600000; // base64 길이 기준, 약 4MB
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = GEMINI_FLASH;
+// Gemini 가 429 · 5xx · 시간 초과면 한 번만 이 모델로 다시 한다(키가 없을 때도).
+const FALLBACK_MODEL = "claude-sonnet-5";
+const isGemini = (model) => String(model || "").startsWith("gemini-");
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const HISTORY_LIMIT = 8;
@@ -267,7 +274,7 @@ return LANGUAGES.find((l) => l.code === code) || LANGUAGES[0];
 }
 
 // withExtract: 이미지를 한 번에(single) 읽고 번역할 때만 extracted_text 를 받는다.
-// 나눠 읽기(split, 2026-10-23 기본)에서는 글자 읽기를 Haiku 가 따로 하므로 받지 않는다(출력이 절반이 된다).
+// 나눠 읽기(split, 2026-10-23 기본)에서는 글자 읽기를 받아 적기 모델(OCR_MODEL)이 따로 하므로 받지 않는다(출력이 절반이 된다).
 function outputSchema(withExtract) {
 const properties = {
 detected_language: { type: "string" },
@@ -554,7 +561,10 @@ const IMAGE_MODE_DEFAULT = "split";
 const THINKING_DEFAULT = "off";
 // 받아 적기 모델: Haiku 4.5 는 빠를 줄 알았는데 베트남어 성조 · 한글을 자주 틀렸고(bảng→bằng, gửi→quỹ) 시간도 같았다(10초).
 // Sonnet 5(생각 끔)는 번역과 거의 같은 때 끝나고 거의 틀리지 않는다. 비용은 예전 한 번에 받아 적던 것과 같다.
-const OCR_MODEL = "claude-sonnet-5";
+// 2026-11-06: Gemini Flash(생각 가장 낮게)로 바꿈. 같은 베트남 캐처로 성조 · 한글을 확인해 틀리면 이 줄만 claude-sonnet-5 로 되돌린다(DEVLOG 13).
+const OCR_MODEL = GEMINI_FLASH;
+// 관리자가 받아 적기 모델을 비교해 볼 때만 고를 수 있는 후보(번역 모델 + 생각을 끌 수 있는 Flash)
+const OCR_MODELS = new Set([...ALLOWED_MODELS, "gemini-3.6-flash"]);
 const OCR_SYSTEM = `You transcribe images for a business translation tool. Output only the text you can read in the image(s), exactly as printed, in natural reading order.
 - Do not translate, summarise, correct, explain or comment. No preface, no markdown.
 - Keep line breaks, numbers, prices, codes, currency symbols, @mentions and the original spelling, including all Vietnamese diacritics.
@@ -615,7 +625,7 @@ headers["anthropic-beta"] = FALLBACK_BETA;
 return { body, headers };
 }
 
-function describeHttpError(status, apiMessage) {
+function describeHttpError(status, apiMessage, provider = "Anthropic") {
 switch (status) {
 case 401:
 case 403:
@@ -623,10 +633,10 @@ return "서버에 등록된 API 키에 문제가 있습니다. 관리자에게 �
 case 404: return "선택한 모델을 찾을 수 없습니다. 설정에서 모델을 바꿔 보세요.";
 case 413: return "입력이 너무 깁니다. 나눠서 번역해 주세요.";
 case 429: return "요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.";
-case 529: return "Anthropic 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.";
+case 529: return `${provider} 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.`;
 default:
 return status >= 500
-? "Anthropic 서버 오류입니다. 잠시 후 다시 시도해 주세요."
+? `${provider} 서버 오류입니다. 잠시 후 다시 시도해 주세요.`
 : `요청 오류 (${status}): ${apiMessage || "알 수 없는 오류"}`;
 }
 }
@@ -676,8 +686,12 @@ return out;
 }
 
 // Anthropic SSE 를 사건 하나씩 꺼낸다.
-async function* sseEvents(stream) {
+// signal 이 끊기면(시간 초과) 읽기를 멈춘다 — 몸통이 멈춘 채 기다리지 않게.
+async function* sseEvents(stream, signal) {
 const reader = stream.getReader();
+signal?.addEventListener("abort", () => {
+reader.cancel(signal.reason).catch(() => {});
+}, { once: true });
 const dec = new TextDecoder();
 let buf = "";
 for (;;) {
@@ -762,6 +776,188 @@ out = await postAnthropicStreamOnce(request, onText);
 return out;
 }
 
+// ===== Google Gemini (2026-11-06~ 기본 번역) =====
+// 공식 문서(ai.google.dev, 2026-11-06 확인): generateContent · streamGenerateContent?alt=sse · systemInstruction ·
+// generationConfig.responseMimeType + responseJsonSchema(additionalProperties · required · enum 받음) · thinkingConfig.thinkingLevel ·
+// 그림 inlineData{mimeType,data}(PNG · JPEG · WEBP · HEIC · HEIF — GIF 안 됨, 앱은 GIF 를 안 보냄) ·
+// usageMetadata{promptTokenCount · cachedContentTokenCount · candidatesTokenCount · thoughtsTokenCount}.
+// 지원 지역에 일본 · 한국은 있고 홍콩은 없다 → wrangler.toml 의 도쿄 placement 그대로.
+// Anthropic 전용 값(cache_control · output_config.effort · thinking · fallbacks 베타 · anthropic-version)은 넣지 않는다.
+
+// 생각 수준: 글 번역은 낮게, 사진 · 받아 적기는 가장 낮게. 3.8 Flash · 3.1 Pro 는 minimal 이 없어 low 가 가장 낮다.
+const GEMINI_THINKING = { text: "low", image: "minimal", ocr: "minimal" };
+const GEMINI_LEVELS = ["minimal", "low", "medium", "high"];
+function geminiLevel(model, wanted) {
+const m = String(model || "");
+const hasMinimal = /3\.6-flash|flash-lite|^gemini-3-flash/.test(m);
+const level = GEMINI_LEVELS.includes(wanted) ? wanted : "low";
+return (level === "minimal" && !hasMinimal ? "low" : level).toUpperCase();
+}
+
+function geminiHeaders(env) {
+return { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY };
+}
+
+// 시간 초과(밀리초). 모의 시험에서만 env 로 줄인다.
+function geminiTimeouts(env) {
+return { connect: Number(env.GEMINI_CONNECT_MS) || GEMINI_CONNECT_MS, idle: Number(env.GEMINI_IDLE_MS) || GEMINI_IDLE_MS };
+}
+
+function geminiImageParts(images) {
+return images.map((img) => ({ inlineData: { mimeType: img.mediaType, data: img.data } }));
+}
+
+// 번역 요청. 지침 글(v2) · 출력 모양(outputSchema) · 문맥(대화 기록)은 Claude 길과 똑같다.
+function buildGeminiRequest(env, { model, room, text, userNote, history, images, version = PROMPT_DEFAULT, imageMode = "", geminiThinking = "" }) {
+const mode = images.length ? imageMode || IMAGE_MODE_DEFAULT : "";
+const systemText = version === "v2" ? buildSystemPromptV2(room, mode) : buildSystemPrompt(room, mode);
+const parts = images.length
+? [...geminiImageParts(images), { text: buildImageMessage(userNote, history, images.length, version) }]
+: [{ text: buildUserMessage(text, history, version) }];
+const wanted = geminiThinking || (images.length ? GEMINI_THINKING.image : GEMINI_THINKING.text);
+return {
+model,
+body: {
+systemInstruction: { parts: [{ text: systemText }] },
+contents: [{ role: "user", parts }],
+generationConfig: {
+responseMimeType: "application/json",
+responseJsonSchema: outputSchema(mode === "single"),
+maxOutputTokens: 16000,
+thinkingConfig: { thinkingLevel: geminiLevel(model, wanted) },
+},
+},
+headers: geminiHeaders(env),
+timeouts: geminiTimeouts(env),
+};
+}
+
+function buildGeminiOcrRequest(env, images, model, geminiThinking = "") {
+return {
+model,
+body: {
+systemInstruction: { parts: [{ text: OCR_SYSTEM }] },
+contents: [{ role: "user", parts: [...geminiImageParts(images), { text: "Transcribe the text in the image(s)." }] }],
+generationConfig: {
+maxOutputTokens: 6000,
+thinkingConfig: { thinkingLevel: geminiLevel(model, geminiThinking || GEMINI_THINKING.ocr) },
+},
+},
+headers: geminiHeaders(env),
+timeouts: geminiTimeouts(env),
+};
+}
+
+// 어느 지역에서 왔는지 때문에 막혔는가 (Gemini 는 400 FAILED_PRECONDITION "User location is not supported").
+function isGeminiRegionBlock(status, data) {
+const msg = data?.error?.message || "";
+return (status === 400 || status === 403) && /location is not supported|not available in your (country|region)/i.test(msg);
+}
+
+// 키가 틀렸거나 권한이 없는가 (400 API_KEY_INVALID · 403 PERMISSION_DENIED).
+function isGeminiKeyError(status, data) {
+const msg = data?.error?.message || "";
+const reason = JSON.stringify(data?.error?.details || []);
+return status === 401 || status === 403 || (status === 400 && /API_KEY_INVALID|API key not valid|API key expired/i.test(msg + reason));
+}
+
+// 응답 끝 남은 까닭(finishReason)을 Claude 길이 쓰는 이름으로 바꾼다. 뒤쪽(runTranslate)은 모델을 가리지 않는다.
+function geminiStop(finishReason, blockReason) {
+if (blockReason) return "refusal";
+if (finishReason === "MAX_TOKENS") return "max_tokens";
+if (["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION", "IMAGE_SAFETY"].includes(finishReason)) return "refusal";
+return finishReason ? "end_turn" : null;
+}
+
+// usageMetadata → Claude 길과 같은 모양. 입력 = prompt(캐시 포함), 출력 = candidates + thoughts.
+function geminiUsage(u) {
+const prompt = u?.promptTokenCount || 0;
+const cached = u?.cachedContentTokenCount || 0;
+return {
+input_tokens: Math.max(0, prompt - cached),
+cache_read_input_tokens: cached,
+output_tokens: (u?.candidatesTokenCount || 0) + (u?.thoughtsTokenCount || 0),
+thoughts_tokens: u?.thoughtsTokenCount || 0,
+};
+}
+
+// 연결 · 조각 사이가 이만큼 조용하면 끊긴 것으로 본다(시간 초과 → Claude 로 한 번).
+const GEMINI_CONNECT_MS = 30000;
+const GEMINI_IDLE_MS = 30000;
+
+// 흘려받기 한 번. 돌려주는 모양은 postAnthropicStreamOnce 와 같다 — 생각 조각(thought)은 버린다.
+async function postGeminiStreamOnce(request, onText) {
+const ctrl = new AbortController();
+const limits = request.timeouts || { connect: GEMINI_CONNECT_MS, idle: GEMINI_IDLE_MS };
+let timer = setTimeout(() => ctrl.abort("connect timeout"), limits.connect);
+const touch = () => {
+clearTimeout(timer);
+timer = setTimeout(() => ctrl.abort("idle timeout"), limits.idle);
+};
+let res;
+try {
+res = await fetch(`${GEMINI_URL}/models/${encodeURIComponent(request.model)}:streamGenerateContent?alt=sse`, {
+method: "POST",
+headers: request.headers,
+body: JSON.stringify(request.body),
+signal: ctrl.signal,
+});
+} catch (err) {
+clearTimeout(timer);
+return { res: null, data: null, netError: String(ctrl.signal.reason || err?.message || err) };
+}
+if (!res.ok) {
+clearTimeout(timer);
+let data = null;
+try {
+data = await res.json();
+} catch {
+data = null;
+}
+if (Array.isArray(data)) data = data[0] || null;
+return { res, data };
+}
+let text = "";
+let finish = null;
+let block = null;
+let model = request.model;
+let usage = null;
+let streamError = null;
+try {
+touch();
+for await (const ev of sseEvents(res.body, ctrl.signal)) {
+touch();
+if (ev.error) {
+streamError = ev.error;
+continue;
+}
+if (ev.modelVersion) model = ev.modelVersion;
+if (ev.usageMetadata) usage = ev.usageMetadata;
+if (ev.promptFeedback?.blockReason) block = ev.promptFeedback.blockReason;
+const cand = ev.candidates?.[0];
+if (!cand) continue;
+if (cand.finishReason) finish = cand.finishReason;
+let grew = false;
+for (const part of cand.content?.parts || []) {
+if (part.thought || typeof part.text !== "string") continue;
+text += part.text;
+grew = true;
+}
+if (grew) onText?.(text);
+}
+} catch (err) {
+return { res: null, data: null, netError: `stream: ${String(ctrl.signal.reason || err?.message || err)}` };
+} finally {
+clearTimeout(timer);
+}
+if (ctrl.signal.aborted) return { res: null, data: null, netError: `stream: ${String(ctrl.signal.reason || "aborted")}` };
+if (streamError) {
+const code = Number(streamError.code) || 500;
+return { res: { ok: false, status: code }, data: { error: streamError } };
+}
+return { res, data: { model, stop_reason: geminiStop(finish, block), usage: geminiUsage(usage), content: [{ type: "text", text }] } };
+}
+
 // 아직 다 오지 않은 JSON 에서 문자열 칸 하나를 읽는다. { text, done } 또는 null.
 function partialField(raw, key) {
 const at = raw.indexOf(`"${key}"`);
@@ -816,16 +1012,31 @@ return { images };
 }
 
 // 이미지 글자 받아 적기(OCR_MODEL). 실패해도 번역은 살린다(원문만 비게 된다).
-async function runOcr(env, images, ocrModel) {
+// Gemini 받아 적기가 429 · 5xx · 시간 초과면 한 번만 Claude(FALLBACK_MODEL)로.
+async function runOcr(env, images, ocrModel, geminiThinking = "") {
 const t0 = Date.now();
-const { res, data } = await postAnthropic(buildOcrRequest(env, images, ocrModel));
+let used = ocrModel;
+let out;
+if (isGemini(ocrModel) && env.GEMINI_API_KEY) {
+out = await postGeminiStreamOnce(buildGeminiOcrRequest(env, images, ocrModel, geminiThinking), null);
+const s = out.res ? out.res.status : 0;
+if (s === 0 || s === 429 || s >= 500) {
+console.error("gemini ocr → claude", s, out.netError || out.data?.error?.message || "");
+used = FALLBACK_MODEL;
+out = await postAnthropic(buildOcrRequest(env, images, FALLBACK_MODEL));
+}
+} else {
+if (isGemini(ocrModel)) used = FALLBACK_MODEL; // 키가 아직 없으면 예비로
+out = await postAnthropic(buildOcrRequest(env, images, used));
+}
+const { res, data } = out;
 const ms = Date.now() - t0;
 if (!res || !res.ok) {
-console.error("ocr error", res?.status, data?.error?.message || "");
-return { text: "", ms, inTok: 0, outTok: 0 };
+console.error("ocr error", used, res?.status, data?.error?.message || out.netError || "");
+return { text: "", ms, inTok: 0, outTok: 0, model: used };
 }
 const text = (data?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-return { text, ms, inTok: data?.usage?.input_tokens || 0, outTok: data?.usage?.output_tokens || 0 };
+return { text, ms, inTok: usageTokens(data?.usage), outTok: data?.usage?.output_tokens || 0, model: used };
 }
 
 function usageTokens(u) {
@@ -838,7 +1049,7 @@ async function runTranslate(env, request, user, args, emit) {
 const { model, images, text } = args;
 const t0 = Date.now();
 const imageMode = images.length ? args.imageMode || IMAGE_MODE_DEFAULT : "";
-const ocrPromise = imageMode === "split" ? runOcr(env, images, args.ocrModel || OCR_MODEL) : null;
+const ocrPromise = imageMode === "split" ? runOcr(env, images, args.ocrModel || OCR_MODEL, args.ocrThinking) : null;
 
 let sentLen = 0;
 let dirSent = false;
@@ -868,24 +1079,60 @@ dirSent = false;
 }
 : null;
 
+// Gemini 길 → 429 · 5xx · 시간 초과면 한 번만 Claude Sonnet 5 로. 키가 아직 없어도 Claude 로(배포 순서가 뒤바뀌어도 안전).
+let usedModel = model;
+let fallback = null;
+let res;
+let data;
+let netError;
+const claudeCall = async (m) => {
 // Opus 5는 안전 분류기가 요청을 거절할 수 있어 서버 측 폴백을 기본으로 켠다.
-const useFallbacks = model === "claude-opus-5";
-const call = (req) => postAnthropicStream(req, onText, onReset);
-let { res, data, netError } = await call(buildRequest(env, { ...args, imageMode, useFallbacks }));
-
-if (res && !res.ok && useFallbacks && res.status === 400) {
+const useFallbacks = m === "claude-opus-5";
+let out = await postAnthropicStream(buildRequest(env, { ...args, model: m, imageMode, useFallbacks }), onText, onReset);
+if (out.res && !out.res.ok && useFallbacks && out.res.status === 400) {
 onReset?.();
-({ res, data, netError } = await call(buildRequest(env, { ...args, imageMode, useFallbacks: false })));
+out = await postAnthropicStream(buildRequest(env, { ...args, model: m, imageMode, useFallbacks: false }), onText, onReset);
 }
+return out;
+};
+
+if (isGemini(model) && env.GEMINI_API_KEY) {
+({ res, data, netError } = await postGeminiStreamOnce(buildGeminiRequest(env, { ...args, imageMode }), onText));
+const s = res ? res.status : 0;
+if (s === 0 || s === 429 || s >= 500) {
+console.error("gemini → claude", s, request.cf?.colo, netError || data?.error?.message || "");
+fallback = { from: model, status: s, reason: netError || data?.error?.status || "" };
+onReset?.();
+usedModel = FALLBACK_MODEL;
+({ res, data, netError } = await claudeCall(FALLBACK_MODEL));
+}
+} else {
+if (isGemini(model)) {
+console.error("gemini key missing → claude");
+fallback = { from: model, status: 0, reason: "no_key" };
+usedModel = FALLBACK_MODEL;
+}
+({ res, data, netError } = await claudeCall(usedModel));
+}
+const provider = isGemini(usedModel) ? "Gemini" : "Anthropic";
 const modelMs = Date.now() - t0;
 
 if (!res) {
-console.error("anthropic network error", request.cf?.colo, netError);
-return { ok: false, status: 503, error: "번역 서버(Anthropic)에 닿지 못했습니다. 잠시 후 다시 시도해 주세요." };
+console.error("translate network error", usedModel, request.cf?.colo, netError);
+return { ok: false, status: 503, error: `번역 서버(${provider})에 닿지 못했습니다. 잠시 후 다시 시도해 주세요.` };
 }
 
 if (!res.ok) {
 const apiMessage = data?.error?.message || "";
+if (provider === "Gemini") {
+if (isGeminiRegionBlock(res.status, data)) {
+console.error("gemini region block", request.cf?.colo, apiMessage);
+return { ok: false, status: 503, error: "번역 서버가 잠시 막힌 경로를 거쳤습니다. 다시 시도해 주세요.", extra: { code: "region_block" } };
+}
+console.error("gemini error", res.status, request.cf?.colo, apiMessage);
+const keyErr = isGeminiKeyError(res.status, data);
+return { ok: false, status: keyErr ? 502 : res.status, error: describeHttpError(keyErr ? 401 : res.status, apiMessage, "Gemini") };
+}
 if (isRegionBlock(res.status, data)) {
 // 키 문제가 아니다. 잘못된 안내(「API 키 문제」)를 하지 않는다.
 console.error("anthropic region block", request.cf?.colo, apiMessage);
@@ -893,7 +1140,7 @@ return { ok: false, status: 503, error: "번역 서버가 잠시 막힌 경로�
 }
 console.error("anthropic error", res.status, request.cf?.colo, apiMessage);
 const status = res.status === 401 || res.status === 403 ? 502 : res.status;
-return { ok: false, status, error: describeHttpError(res.status, apiMessage) };
+return { ok: false, status, error: describeHttpError(res.status, apiMessage, provider) };
 }
 
 if (data?.stop_reason === "refusal") {
@@ -946,15 +1193,20 @@ detectedLanguage: parsed.detected_language || "",
 translation,
 note: (parsed.note || "").trim(),
 extractedText: (parsed.extracted_text || "").trim(),
-model: data?.model || model,
+// 실제로 쓴 모델(예비로 넘어갔으면 Claude). Gemini 는 modelVersion, Claude 는 응답의 model.
+model: data?.model || usedModel,
+...(fallback ? { fallback } : {}),
 prompt: args.version,
 timing: {
 total: Date.now() - t0,
 model: modelMs,
 first: firstMs || null,
 ocr: null,
+ocrModel: null,
 cacheRead: data?.usage?.cache_read_input_tokens || 0,
+in: usageTokens(data?.usage),
 out: data?.usage?.output_tokens || 0,
+thoughts: data?.usage?.thoughts_tokens || 0,
 },
 };
 
@@ -966,6 +1218,7 @@ return { ok: true, result };
 const finishOcr = async () => {
 const ocr = await ocrPromise;
 result.timing.ocr = ocr.ms;
+result.timing.ocrModel = ocr.model || null;
 await recordUsage(ocr);
 return ocr.text;
 };
@@ -1002,10 +1255,13 @@ const isAdmin = user.role === "admin";
 const version = isAdmin && (body.promptVersion === "v1" || body.promptVersion === "v2") ? body.promptVersion : PROMPT_DEFAULT;
 const effort = isAdmin && ["low", "medium", "high"].includes(body.effort) ? body.effort : "low";
 const imageMode = isAdmin && ["single", "split"].includes(body.imageMode) ? body.imageMode : IMAGE_MODE_DEFAULT;
-const ocrModel = isAdmin && ALLOWED_MODELS.has(body.ocrModel) ? body.ocrModel : OCR_MODEL;
+const ocrModel = isAdmin && OCR_MODELS.has(body.ocrModel) ? body.ocrModel : OCR_MODEL;
+// Gemini 생각 수준(관리자 비교용): 번역 · 받아 적기 따로. 기본은 GEMINI_THINKING.
+const geminiThinking = isAdmin && GEMINI_LEVELS.includes(body.geminiThinking) ? body.geminiThinking : "";
+const ocrThinking = isAdmin && GEMINI_LEVELS.includes(body.ocrThinking) ? body.ocrThinking : "";
 // 생각(thinking): 글 번역은 low 에서 거의 생각하지 않아 켜 두어도 빠르다(2026-10-23 측정 같음). 이미지는 생각이 길어져 끈다.
 const thinking = isAdmin && ["adaptive", "off"].includes(body.thinking) ? body.thinking : images.length ? THINKING_DEFAULT : "adaptive";
-const args = { model, room, text, userNote, history, images, version, effort, imageMode, thinking, ocrModel };
+const args = { model, room, text, userNote, history, images, version, effort, imageMode, thinking, ocrModel, geminiThinking, ocrThinking };
 
 // 옛 앱(캐시된 PWA)은 stream 을 모른다 → 예전처럼 한 번에 JSON.
 if (body.stream !== true) {
@@ -1241,6 +1497,31 @@ const usage = await env.DB.prepare(
 return json({ users: users.results || [], invites: invites.results || [], usage: usage.results || [] }, 200, request, env);
 }
 
+// 관리자: 이 키로 쓸 수 있는 Gemini 모델 목록(GET /v1beta/models). 모델 ID 를 고를 때 본다 — 키는 내보내지 않는다.
+async function handleAdminModels(request, env, user) {
+if (user.role !== "admin") return fail("관리자만 사용할 수 있습니다.", 403, request, env);
+if (!env.GEMINI_API_KEY) return fail("GEMINI_API_KEY 가 아직 없습니다.", 409, request, env);
+const names = [];
+let pageToken = "";
+for (let i = 0; i < 5; i += 1) {
+const res = await fetch(`${GEMINI_URL}/models?pageSize=200${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, { headers: geminiHeaders(env) });
+let data = null;
+try {
+data = await res.json();
+} catch {
+data = null;
+}
+if (!res.ok) return fail(`Gemini 모델 목록을 못 읽었습니다 (${res.status}) ${data?.error?.status || ""}`, 502, request, env);
+for (const m of data?.models || []) {
+if (!(m.supportedGenerationMethods || []).includes("generateContent")) continue;
+names.push({ id: String(m.name || "").replace(/^models\//, ""), display: m.displayName || "", thinking: !!m.thinking, outMax: m.outputTokenLimit || 0 });
+}
+pageToken = data?.nextPageToken || "";
+if (!pageToken) break;
+}
+return json({ default: DEFAULT_MODEL, allowed: [...ALLOWED_MODELS], models: names }, 200, request, env);
+}
+
 // 워커가 실제로 도는 곳(바깥으로 나가는 곳). /api/health?where=1 로 확인한다.
 async function egressColo() {
 try {
@@ -1273,7 +1554,8 @@ return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 }
 
 if (path === "/" || path === "/api/health") {
-const info = { ok: true, service: "biz-translator-api", edge: request.cf?.colo || "?" };
+// ai: 기본 모델과 Gemini 키가 들어 있는지(참 · 거짓만 — 키 값은 절대 내보내지 않음)
+const info = { ok: true, service: "biz-translator-api", edge: request.cf?.colo || "?", ai: { model: DEFAULT_MODEL, gemini: !!env.GEMINI_API_KEY } };
 if (url.searchParams.get("where")) info.runs = await egressColo();
 return json(info, 200, request, env);
 }
@@ -1321,6 +1603,7 @@ return handleSyncPull(request, env, user, Number(url.searchParams.get("since") |
 if (path === "/api/sync" && request.method === "POST") return handleSyncPush(request, env, user, body);
 if (path === "/api/admin/invites" && request.method === "POST") return handleCreateInvites(request, env, user, body);
 if (path === "/api/admin/overview" && request.method === "GET") return handleAdminOverview(request, env, user);
+if (path === "/api/admin/models" && request.method === "GET") return handleAdminModels(request, env, user);
 
 return fail("알 수 없는 경로입니다.", 404, request, env);
 }

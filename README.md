@@ -30,8 +30,10 @@ wrangler.toml         Worker 배포 설정
 package.json          Worker 배포용 (앱 자체는 여전히 빌드 없음)
 ```
 
-번역은 백엔드가 [Anthropic Claude API](https://docs.claude.com)를 대신 호출합니다.
-기본 모델은 `claude-sonnet-5`이며 설정에서 Opus 5 / Haiku 4.5로 바꿀 수 있습니다.
+번역은 백엔드가 [Google Gemini API](https://ai.google.dev/gemini-api/docs)를 대신 호출합니다 (2026-11-06부터).
+기본 모델은 `gemini-3.8-flash`이고, 설정에서 Gemini Pro(`gemini-3.1-pro-preview`) 또는 예비 Claude Sonnet 5로 바꿀 수 있습니다.
+Gemini 가 붐빔(429) · 서버 오류(5xx) · 시간 초과면 서버가 **한 번만** [Anthropic Claude](https://docs.claude.com) Sonnet 5로 다시 번역하고, 응답의 `model` 에 실제로 쓴 모델을 남깁니다.
+되돌리기: `worker/index.js` 의 `DEFAULT_MODEL` 을 `"claude-sonnet-5"` 로 바꾸고 배포(한 줄).
 
 ## 계정과 동기화
 
@@ -39,7 +41,7 @@ package.json          Worker 배포용 (앱 자체는 여전히 빌드 없음)
 
 ```
 [PC · 모바일 PWA]  ──Bearer 토큰──>  [Cloudflare Worker]
-                                    ├─ ANTHROPIC_API_KEY (서버 시크릿)
+                                    ├─ GEMINI_API_KEY · ANTHROPIC_API_KEY(예비) (서버 시크릿)
                                     └─ D1: users · sessions · invites · rooms · messages · usage_daily
 ```
 
@@ -58,10 +60,10 @@ package.json          Worker 배포용 (앱 자체는 여전히 빌드 없음)
 
 1. **D1 → Create Database**: `biz-translator-db` (테이블은 Worker가 첫 요청에 자동 생성)
 2. **Workers → Create**: `biz-translator-api`
-3. **Settings → Variables and Secrets**: `ANTHROPIC_API_KEY` (Secret 체크 필수)
+3. **Settings → Variables and Secrets**: `GEMINI_API_KEY` · `ANTHROPIC_API_KEY`(예비) (둘 다 Secret 체크 필수)
 
 그 다음부터는 명령 한 줄로 배포합니다. D1 바인딩은 `wrangler.toml`에 적혀 있고,
-시크릿(`ANTHROPIC_API_KEY`)은 배포해도 지워지지 않습니다.
+시크릿은 배포해도 지워지지 않습니다. `GEMINI_API_KEY` 가 없으면 서버는 Claude 로 번역합니다.
 
 ```bash
 npm install
@@ -69,7 +71,8 @@ npx wrangler login      # 처음 한 번
 npx wrangler deploy
 ```
 
-배포 뒤 `https://biz-translator-api.<계정>.workers.dev/api/health` 가 `{"ok":true}` 를 돌려주면 정상입니다.
+배포 뒤 `https://biz-translator-api.<계정>.workers.dev/api/health` 가 `{"ok":true, "ai":{"model":"gemini-3.8-flash","gemini":true}}` 를 돌려주면 정상입니다
+(`gemini:false` 면 키가 아직 없는 것). 관리자는 `GET /api/admin/models` 로 이 키가 쓸 수 있는 Gemini 모델 목록을 볼 수 있습니다.
 
 앞단 주소가 바뀜면 두 곳을 고쳐야 합니다.
 `worker/index.js`의 `DEFAULT_ORIGINS`(CORS)와 `index.html`의 CSP `connect-src`입니다.
@@ -89,7 +92,8 @@ npx wrangler deploy
 
 | 항목 | 내용 |
 |---|---|
-| 보내기 전 처리 | 긴 변 1568px으로 축소 (Anthropic 권장 상한, 더 크면 토큰만 늘고 인식률은 그대로) |
+| 보내기 전 처리 | 긴 변 1568px으로 축소 (토큰만 늘고 인식률은 그대로인 상한) |
+| 번역 · 받아 적기 | 번역(Gemini Flash)과 원문 받아 적기를 **동시에** 따로 부름. 번역이 먼저 보이고 원문이 뒤따름 |
 | 형식 | PNG로 내보내되, 1.2MB를 넘으면 JPEG(q0.92). 투명 배경은 흰색을 깔아 검은 글씨가 사라지지 않게 함 |
 | 서버 보관 | **안 함.** Worker는 중계만 하고 D1에는 추출된 글자와 번역문만 남습니다 |
 | 원본 보관 | 찍은 기기의 IndexedDB(`biztr-images`). 그래서 다른 기기에서는 썸네일 대신 "이 기기에 원본 없음"으로 보이고, 다시 번역은 추출된 글자로 동작합니다 |
@@ -125,8 +129,10 @@ python -m http.server 8765
 
 ## API 키와 보안
 
-- [Anthropic Console](https://platform.claude.com)에서 **이 앱 전용 키**를 발급하고 **월 지출 한도**를 설정하세요.
-- 키는 Cloudflare Worker의 시크릿에만 있습니다. 브라저·저장소 코드·백업 파일 어느 곳에도 없습니다.
+- [Google AI Studio](https://aistudio.google.com)에서 **결제 카드가 연결된 프로젝트**로 **이 앱 전용 키**를 만드세요.
+  무료 등급은 대화 내용이 구글 제품 개선에 쓰입니다(요금표 «Used to improve our products: Yes»). 바이어와 가격 · 조건이 오가는 앱이라 **유료(«No») 키만** 씁니다.
+- 구글 클라우드 결제에 **월 예산 알림**을, [Anthropic Console](https://platform.claude.com)(예비 키)에는 **월 지출 한도**를 걸어 두세요.
+- 키는 Cloudflare Worker의 시크릿에만 있습니다. 브라우저·저장소 코드·백업 파일 어느 곳에도 없습니다.
 - **키를 코드에 넣어 커밋하지 마세요.** GitHub Pages 무료 플랜은 공개 저장소입니다.
 - 외부 스크립트를 쓰지 않고 CSP로 연결 대상을 Worker 주소 하나로 제한해 두었습니다.
 - 번역 대상은 `<message_to_translate>` 태그로 격리하고 입력 속 동일 태그는 치환합니다. 프롬프트 인젝션 문장도 지시로 따르지 않고 그대로 번역합니다.
@@ -135,7 +141,7 @@ python -m http.server 8765
 
 ## 번역 품질 점검표
 
-프롬프트(`js/translator.js`의 `buildSystemPrompt`)를 고친 뒤 아래 문장으로 확인하세요.
+지침(`worker/index.js` 의 `buildSystemPromptV2`)이나 번역 모델을 바꾼 뒤 아래 문장으로 확인하세요.
 
 | 입력 | 기대 결과 |
 |---|---|

@@ -1,6 +1,6 @@
 # Cloudflare Worker 배포 설정 (앱 본체는 GitHub Pages라 여기와 무관하다)
 #   배포: npx wrangler deploy
-#   비밀값(ANTHROPIC_API_KEY)은 여기 적지 않는다. 대시보드나 `wrangler secret put` 으로 넣고,
+#   비밀값(GEMINI_API_KEY · ANTHROPIC_API_KEY)은 여기 적지 않는다. 대시보드나 `wrangler secret put` 으로 넣고,
 #   배포할 때는 기존 값이 그대로 유지된다.
 
 name = "biz-translator-api"
@@ -15,6 +15,7 @@ enabled = true
 # 까닭: 한국 통신사 접속이 가끔 홍콩(HKG) 데이터센터로 가는데, Anthropic 은 홍콩에서 온 요청을
 #        403 "Request not allowed" 로 막는다. 그때 앱에 「API 키 문제」 가 떴다.
 # 도쿄는 Anthropic 지원 지역이고, D1(APAC)에도 가깝다.
+# Gemini API 도 홍콩은 지원 지역이 아니고 일본은 맞다(ai.google.dev «Available regions», 2026-11-06 확인) → 그대로 둔다.
 [placement]
 region = "aws:ap-northeast-1"
 

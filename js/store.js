@@ -155,9 +155,22 @@ export function saveState(userId, state) {
   });
 }
 
+// 번역 모델 기본값 (2026-11-06 대표 결정 「그냥 제미나이로」). 서버(worker DEFAULT_MODEL)와 같게 둔다.
+export const DEFAULT_MODEL = "gemini-3.8-flash";
+// 이 기기에 Claude 가 저장돼 있으면 한 번만 Gemini Flash 로 옮긴다. 직접 고른 것과 기본값을 구별할 수 없어 모두 옮기고,
+// 옮긴 표시(aiMigrated)를 남겨 두 번 옮기지 않는다 — 그 뒤에 설정에서 Claude 를 고르면 그대로 쓴다.
+const AI_MIGRATION = "gemini-1106";
+
 export function loadSettings() {
   // theme: auto | light | dark, textSize: m | l | xl (이 기기에만 저장)
-  return { model: "claude-sonnet-5", theme: "auto", textSize: "m", ...read(SETTINGS_KEY, {}) };
+  const saved = read(SETTINGS_KEY, {}) || {};
+  const settings = { model: DEFAULT_MODEL, theme: "auto", textSize: "m", ...saved };
+  if (saved.aiMigrated !== AI_MIGRATION) {
+    if (!saved.model || String(saved.model).startsWith("claude-")) settings.model = DEFAULT_MODEL;
+    settings.aiMigrated = AI_MIGRATION;
+    write(SETTINGS_KEY, settings);
+  }
+  return settings;
 }
 
 export const saveSettings = (settings) => write(SETTINGS_KEY, settings);
