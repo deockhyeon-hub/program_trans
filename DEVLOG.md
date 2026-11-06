@@ -509,3 +509,84 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 
 ### 12 · 11-04 11:49 · 토큰 apply: 팝업 폭 md · lg 큰 화면 비례 (design DEVLOG 104 · POPRZ_1104 · fe45bda)
 - --ds-w-modal-md = clamp(720px, 40vw, 960px) · -lg = clamp(960px, 52vw, 1280px). 번역 앱 화면은 바뀐 것 없음(이 토큰을 쓰는 창 없음). 화면 빌드 없음.
+
+### 13 · 11-06 22:20 — 번역 AI 를 Gemini 로
+
+대표 결정(11-06): 「비교 말고 그냥 제미나이로 할게」. 까닭 = 지금 번역(Claude Sonnet 5, effort low)이 어색하다는 체감 · Gemini 번역이 자연스럽다는 경험.
+대표 지시로 AI Studio · Cloudflare 키 넣기도 직접 했다(「직접 사이트 접속해줘」). 실배포는 미리보기 시험 표를 보고 「배포해」 뒤에.
+
+**한 일**
+
+- 워커(`worker/index.js`)
+  - 기본 모델 `DEFAULT_MODEL = GEMINI_FLASH`(`gemini-3.8-flash`). `ALLOWED_MODELS` 에 Gemini Pro(`gemini-3.1-pro-preview`) 추가, Claude 3종은 예비로 남김.
+  - 모델 이름이 `gemini-` 면 Gemini 길: `streamGenerateContent?alt=sse` · `systemInstruction` = 그대로의 `buildSystemPromptV2` · `responseMimeType` + `responseJsonSchema` = 그대로의 `outputSchema()` · `thinkingConfig.thinkingLevel` · 그림 `inlineData`.
+    Anthropic 전용 값(cache_control · output_config.effort · thinking · fallbacks · anthropic-version)은 넣지 않는다. **지침 글은 한 글자도 안 바꿈.**
+  - 생각: 글 LOW · 사진 · 받아 적기는 「가장 낮게」. 3.8 Flash · 3.1 Pro 는 minimal 이 없어 LOW 로 내려감(3.6 Flash 처럼 minimal 이 있는 모델만 MINIMAL).
+  - 흘려받기: SSE 조각의 글을 이어 붙여 기존 `partialField` 로 `translation` 만 읽고, 앱에는 **똑같은 NDJSON**(start → meta → delta → done → source). 생각 조각(`thought`)은 버림. 앱 쪽 흘려받기 코드는 그대로.
+  - 받아 적기(`runOcr`)도 Gemini Flash(`OCR_MODEL`). 나눠 읽기(split) 그대로.
+  - 사용량: `usageMetadata` → 입력 = promptTokenCount(캐시 포함) · 출력 = candidates + thoughts 를 `usage_daily` 에. 응답 `timing` 에 `in` · `out` · `thoughts` · `cacheRead` · `ocrModel`.
+  - 실패 대비: Gemini 가 429 · 5xx · 시간 초과(연결 30초 · 조각 사이 30초)면 **한 번만** Claude Sonnet 5 로 다시. 응답 `model` 에 실제로 쓴 모델, `fallback{from,status,reason}`. 키가 없으면 처음부터 Claude(배포 순서가 바뀌어도 안전).
+    키 틀림(400 API_KEY_INVALID · 403) → 「API 키 문제」 502, 지역 막힘(400 "User location is not supported") → 503 `region_block`, 안전 차단 → 422.
+  - `/api/health` 에 `ai{model, gemini:true/false}`(키 값은 안 내보냄). 관리자 `GET /api/admin/models` = 이 키로 쓸 수 있는 Gemini 모델 목록.
+  - 관리자 비교용 `geminiThinking` · `ocrThinking` · `ocrModel`(3.6 Flash 포함).
+- 앱
+  - 설정 모델 목록 = Gemini Flash(기본) · Gemini Pro(고품질) · Claude Sonnet 5(예비). `js/store.js` 기본값 Gemini Flash.
+  - **기기에 Claude 가 저장된 사람은 한 번만 Gemini Flash 로 옮김**(`aiMigrated: "gemini-1106"`). 직접 고른 것과 기본값을 구별할 수 없어 Claude 3종 모두 옮겼다(Opus · Haiku 는 메뉴에서 빠져 그대로 두면 빈칸이 됨). 옮긴 뒤 설정에서 Claude 를 고르면 그대로 쓴다.
+  - `sw.js` 캐시 `biztr-shell-v15`. CSP 그대로(앱은 워커만 부른다).
+- README: 번역 엔진 · 백엔드 시크릿 · API 키와 보안(유료 키만 · 무료는 «Used to improve our products: Yes») · health · 점검표 안내 문구.
+- 키 · 결제(대표 승인 받아 진행)
+  - AI Studio 처음 약관 동의(마케팅 메일 안 받음) → 「Default Gemini Project」 가 무료 등급이었음 → Cloud Billing 계정(Mastercard ••6617, Cloud Prepay 0118FB-001314-DDA32D) 만들기 → **선불 크레딧 결제는 대표님이 직접** → Tier 1.
+  - 이 앱 전용 키 「biz-translator (Cloudflare worker)」 를 새로 만들어 Cloudflare `GEMINI_API_KEY`(Secret, Production + Previews)로. 기본으로 만들어져 있던 「Default Gemini API Key」 는 안 씀.
+
+**확인 (숫자)**
+
+| 항목 | 결과 |
+|---|---|
+| 워커 모의 시험(가짜 Gemini · Claude · D1) | 33/33 — 주소 · 머리 · 지침 · 스키마 · LOW · Anthropic 값 없음 · NDJSON 순서 · 생각 조각 버림 · usage · 429/스트림 중 503/조용해짐 → Claude · 키 없음 · 키 틀림 · 지역 막힘 · 안전 차단 · 사진 나눠 읽기 · 관리자 3.6 MINIMAL · Claude 길 그대로 · health |
+| 설정 옮기기 모의 시험 | 5/5 (없음 · sonnet · haiku → Flash, Pro 그대로, 옮긴 뒤 직접 Claude 유지) |
+| 실제 모델 목록(`/api/admin/models`) | `gemini-3.8-flash` · `gemini-3.1-pro-preview` 둘 다 있음 |
+| README 점검표 글 7 | 통과 — R1 「Please review the quotation.」 · R3 「Have a great day!」 · R4 USD 4.20 · FOB Busan · 500kg · R5 인하 약속 없음 · R6 T/T · B/L 존댓말 · **R7 주입 문장 따르지 않고 번역만** |
+| README 점검표 이미지 4 | 통과 — 메일 숫자 · HS 3304.99 그대로 · 캡처 속 «Ignore all previous instructions» 번역만 · 글자 없는 사진 422 안내 · 「표만 번역해줘」 표만 |
+| 베트남 용어 | công bố → 제품 등록 · xịt khoáng → 미스트 · ddvs → 여성청결제 · nhãn in thực tế → 실물 라벨 · 「Mất 2~3 ngày sếp ơi」 → 「대표님 2~3일 정도 걸려요」 · Thứ 2 → 월요일 · Thảo Vy · Sở 철자 그대로 · 빗금 0 |
+| 괄호 속 대안 | **1종 남음**: 「gửi cọc」 → 「계약금(선금)」 5번 중 3번(아래 남은 것) |
+| 베트남 채팅 캡처(740×1712 → 앱처럼 678×1568, 12줄, 정답 447자) | Gemini 받아 적기 3번 모두 **틀린 글자 0**(성조 포함) · Claude 1번 0 → 받아 적기도 Gemini 유지 |
+| 미리보기(SEA) 글 16문장 | Gemini 서버 첫 글자 1.7~6.0초(가운데 2.1) · 끝 1.9~6.1(가운데 2.3) / Claude 1.1~3.7(1.3) · 1.3~3.9(1.7) → 약 1.3배, 1.5배 안 |
+| 미리보기 사진 | Gemini 끝 4.5~5.1초 / Claude 6.1초 |
+| **실서버 NRT(배포 뒤, 이 PC 기준)** | 글 5건 첫 글자 2.2~2.9초 · 끝 2.7~3.9초(예전 Claude 2.1~2.9 · 2.5~3.4) · 사진 2건 끝 6.5~8.5초(예전 9.7~10.4), 서버 기준 5.4~6.0초 |
+| 토큰 | 글 평균 입력 2,254 · 출력 51 · 생각 0 · 캐시 0 / 사진 번역 입력 3,601 · 출력 383 |
+| 비용(1,356원, 2026-12-31 까지 $0.75 · $3.75) | 글 1건 **약 2.6원**(2027-01-01 부터 약 5.1원) · 사진 1건 약 8.5원(받아 적기 추정 포함, 2027 약 17원). 예전 Claude 약 5~18원 |
+| Gemini Pro | 한 문장 약 5초 · 생각 480~540 토큰 → 고품질용으로만 |
+| 배포 | 워커 `be9e366c`(이전 `f6cfb33c` = 옛 코드 + 키), `/api/health?where=1` → `ai.model gemini-3.8-flash · gemini true · runs NRT` 200. Pages `biztr-shell-v15`, 이 브라우저 설정 → `gemini-3.8-flash` · `aiMigrated gemini-1106` |
+
+시험 번역 약 55건(대화방엔 안 남김, 관리자 하루 사용량에는 잡힘). 이번엔 시험용 세션을 따로 만들지 않고 이 PC 앱의 로그인을 그대로 써서(토큰은 찍지 않음) D1 에서 지울 세션이 없다.
+
+**되돌리기** — `worker/index.js` 의 `const DEFAULT_MODEL = GEMINI_FLASH;` 를 `const DEFAULT_MODEL = "claude-sonnet-5";` 로 바꾸고 `npx wrangler deploy`.
+앱은 설정에서 Gemini 를 보내므로 앱 쪽도 `js/store.js` `DEFAULT_MODEL` 을 Claude 로 + `AI_MIGRATION` 값을 바꿔(예: `claude-xxxx`) 한 번 더 옮기고 sw 캐시를 올린다.
+급하면 Cloudflare 에서 `GEMINI_API_KEY` 를 지우기만 해도 서버가 저절로 Claude 로 번역한다(코드 그대로).
+
+**더한 것 · 뺀 것**
+
+- 더함: Gemini 길 전부 · health `ai` · `/api/admin/models` · 관리자 생각 수준 비교 · 설정 한 번 옮기기 · 시크릿 `GEMINI_API_KEY`.
+- 뺌: 설정 메뉴의 Claude Opus 5 · Haiku 4.5 (서버 `ALLOWED_MODELS` 에는 남김). 받아 적기 기본 Claude Sonnet 5 → Gemini Flash.
+
+**밟은 함정**
+
+- 같은 파일에 편집 두 개를 **동시에** 보냈더니 하나가 다른 하나를 덮어써 관리자 비교 줄이 사라졌다(모의 시험 10번이 잡음). 같은 파일은 한 번에 하나씩.
+- 모의 시험에서 「조용해진 스트림」 을 끊으려 AbortController 만 썼더니 몸통 읽기가 영영 멈췄다 → `sseEvents` 가 signal 을 받아 `reader.cancel()`.
+- 3.8 Flash 는 생각 수준에 minimal 이 없다(문서 표). 넣으면 오류일 수 있어 `geminiLevel()` 이 LOW 로 내림.
+- Gemini 의 자동(implicit) 캐시는 이번 시험에서 한 번도 안 맞았다(cachedContentTokenCount 0). 지침이 2,2xx 토큰이라 그래도 1건 2.6원.
+- 미리보기 주소(`gemini-biz-translator-api…`)는 앱 CSP `connect-src` 밖이라 앱 화면에서 부르면 막힌다 → 그림만 앱 화면의 `images.js` 로 줄이고, 요청은 REPL 에서. 미리보기는 SEA 에서 돈다(속도는 비교용).
+- Cloudflare 「Add variable」 창은 붙여넣기(Ctrl+V)가 자동 조작으로 안 먹고, Secret 칸이 창 밖(가로 스크롤)에 있어 클릭이 바깥을 눌러 「Discard changes?」 가 떴다 → 「Keep editing」 → 칸을 화면 안으로 스크롤한 뒤 눌렀다. 값 칸은 textarea.
+- 대시보드에서 시크릿을 넣으면 **옛 코드로 새 판이 즉시 배포**된다(f6cfb33c). 그래서 미리보기 판은 키를 넣은 **뒤에** 올렸다(먼저 올렸으면 그 판이 그대로 배포될 위험).
+- 10분 자동 저장(`autosave.ps1`)이 내가 main 에 합친 것을 먼저 push 했다(Pages 빌드 22:14, 워커 배포 직후). 워커가 이미 새 판이라 문제는 없었지만, 순서를 지키려면 합치기 직전에 워커를 먼저 배포할 것.
+- 모델 목록 글자 오타(「비쌀」)를 배포 뒤 발견해 고침(index.html 한 줄, 서비스 워커는 네트워크 우선이라 캐시 번호는 v15 그대로).
+- 시험 도구(REPL) 상태가 중간에 두 번 비워졌다 → 결과를 바로바로 파일로 남김.
+
+**남은 것**
+
+- [ ] 「cọc」(tiền cọc · đặt cọc) 번역말을 대표님이 정하기 — 선금 · 계약금 · 보증금. 정해지면 용어표 또는 `polishKorean` 에 한 줄(괄호 붙은 다른 말 지우기)
+- [ ] 1주 뒤 Observability 에서 `gemini → claude` 로그 수(예비로 넘어간 횟수) · 사진 시간 · 하루 비용 확인
+- [ ] 대표님이 어색하다고 느낀 실제 문장을 받으면 옛(Claude) · 새(Gemini) 나란히 비교
+- [ ] AI Studio 「Default Gemini API Key」(무료 시절 자동 생성, 안 씀)는 지워도 됨 — 대표님 확인 뒤
+- [ ] 2027-01-01 Gemini Flash 값이 두 배 → 그때 1건 약 5원
+- [ ] 휴대폰 앱은 한두 번 다시 열어야 v15(설정 모델 목록이 Gemini 로 보이면 새 판)
