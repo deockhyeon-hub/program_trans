@@ -919,5 +919,25 @@ td > .ds-sel,td .ds-sel.sm{min-width:0;max-width:100%}   /* 표 칸 안: 칸 폭
 .ds-refresh.ds-spin svg{animation:ds-spin .8s linear infinite}
 @keyframes ds-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ds-refresh.ds-spin svg{animation:none}.ds-refresh.ds-spin{opacity:.55}}
+
+/* ── 7-12 오른쪽 상세 서랍 .ds-drawer (DRW_1104 · CLAUDE 공통 규칙 27 · 대표 11-04 «오른쪽 상세 화면은 항상 전체보기 버튼과 넓이 조절 가능하도록») ──
+   약속: 서랍 상자 class ds-drawer · data-drw 열쇠 · data-drw-w 기본 폭 · role dialog / 머리 ds-drawer__hd 안 단추 자리 ds-drawer__tools(닫기 ✕ 맨 끝) / 몸 ds-drawer__bd · 바닥 ds-drawer__ft
+   자리 · 폭은 이 구역이 정한다 — 화면 CSS 는 서랍 상자의 position · top · width · z-index 를 다시 적지 않는다(안쪽 칸 · 글자만).
+   modules/dsdrw.js 가 채우는 변수: --ds-drw-w(폭 · 계정별 기억) · --ds-drw-top(열린 화면 탭 줄 아래) · --ds-drw-left(왼쪽 메뉴 오른쪽 — 전체 보기 · 좁은 화면)
+   전체 보기 = class is-full(⤢ 단추 · Esc 로 옆 서랍) · 1000px 아래 늘 내용 칸 가득(단추 · 끌기 없음) · 700px 아래 화면 가득(위 메뉴줄 z 50 보다 앞). */
+.ds-drawer{position:fixed;top:var(--ds-drw-top,0px);right:0;bottom:0;z-index:var(--ds-z-drawer,45);box-sizing:border-box;width:var(--ds-drw-w,560px);max-width:calc(100vw - var(--ds-drw-left,0px));
+  display:flex;flex-direction:column;min-height:0;background:var(--ds-bg-layer-default);border-left:1px solid var(--ds-stroke-neutral);box-shadow:-12px 0 32px rgba(15,23,42,.10)}
+.ds-drawer[hidden]{display:none!important}
+.ds-drawer.is-full{left:var(--ds-drw-left,0px)!important;width:auto!important;max-width:none!important;box-shadow:none}   /* !important = 옛 화면 손잡이가 단 인라인 폭(생산 RZB style.width · 메일 #mtDrw)이 전체 보기를 못 이기게 */
+:where(.ds-drawer__hd){flex:none;display:flex;align-items:center;gap:var(--ds-sp-2);min-height:48px;box-sizing:border-box;padding:var(--ds-sp-2) var(--ds-sp-3) var(--ds-sp-2) var(--ds-sp-4);
+  border-bottom:1px solid var(--ds-stroke-neutral);background:var(--ds-bg-layer-default)}
+:where(.ds-drawer__tools){display:flex;align-items:center;gap:var(--ds-sp-1);margin-left:auto;flex:none}
+:where(.ds-drawer__bd){flex:1 1 auto;min-height:0;overflow:auto;padding:var(--ds-sp-4)}
+:where(.ds-drawer__ft){flex:none;display:flex;align-items:center;gap:var(--ds-sp-2);padding:var(--ds-sp-2) var(--ds-sp-4);border-top:1px solid var(--ds-stroke-neutral);background:var(--ds-bg-layer-default)}
+.ds-drawer__full[aria-pressed="true"]{color:var(--ds-fg-accent)}
+@media (max-width:999.98px){.ds-drawer{left:var(--ds-drw-left,0px)!important;width:auto!important;max-width:none!important;box-shadow:none}.ds-drawer :is(.ds-drawer__full,[data-drw-full]){display:none!important}}
+@media (max-width:700px){.ds-drawer{left:0!important;top:0;z-index:60}}
+/* SMALL_1109 (대표 «12px 미만 글자 금지» · 전수 QA 11-09): <small> 기본값(0.83em = 10.8~11.7px)을 12px 바닥으로. 종이(.paper · 인쇄)는 제외 */
+.ds-frame small:not(.paper small):not([data-norz] small){font-size:var(--ds-fs-12)}
 }
 /* DESIGN:COMPONENTS:END */

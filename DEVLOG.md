@@ -590,3 +590,8 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 - [ ] AI Studio 「Default Gemini API Key」(무료 시절 자동 생성, 안 씀)는 지워도 됨 — 대표님 확인 뒤
 - [ ] 2027-01-01 Gemini Flash 값이 두 배 → 그때 1건 약 5원
 - [ ] 휴대폰 앱은 한두 번 다시 열어야 v15(설정 모델 목록이 Gemini 로 보이면 새 판)
+
+### 14 · 11-09 16:15 — 화면 전수 QA 1차 (QA_1109): design 토큰 동기화(분류 8색 토큰 20줄) · sw v16
+
+대표 «모든 프로그램 전수조사». design `tools/audit.py` 로 보면 번역 화면은 규칙 위반 0, 다만 `css/design.css` 토큰이 design 보다 뒤(분류 `--ds-cat-N-*` 20줄 없음)였다 → `apply.py --only trans` 로 맞춤. 화면 변화 없음(토큰만). 서비스워커 캐시 `biztr-shell-v15` → `v16`.
+확인: 깃허브 페이지 반영 뒤 `fetch(..., {cache:'no-store'})` 로 design.css 에 `--ds-cat-1-fg` 가 있는지(20~30초).
