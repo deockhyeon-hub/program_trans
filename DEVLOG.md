@@ -595,3 +595,14 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 
 대표 «모든 프로그램 전수조사». design `tools/audit.py` 로 보면 번역 화면은 규칙 위반 0, 다만 `css/design.css` 토큰이 design 보다 뒤(분류 `--ds-cat-N-*` 20줄 없음)였다 → `apply.py --only trans` 로 맞춤. 화면 변화 없음(토큰만). 서비스워커 캐시 `biztr-shell-v15` → `v16`.
 확인: 깃허브 페이지 반영 뒤 `fetch(..., {cache:'no-store'})` 로 design.css 에 `--ds-cat-1-fg` 가 있는지(20~30초).
+
+
+### 15 · 11-10 HH:MM — 서비스워커를 Workbox 로
+
+왜: 배포 때 `sw.js` 의 `biztr-shell-vNN` 숫자를 올리는 걸 잊으면 옛 화면이 남았다. Workbox 7.4.1(CDN `importScripts`, 빌드 없는 GitHub Pages 라 CDN) 의 런타임 캐시로 바꿔 숫자 올림이 필요 없게 했다.
+무엇: 화면(HTML) = NetworkFirst(3초) · CSS/JS/manifest = StaleWhileRevalidate · 이미지/글꼴 = CacheFirst 30일 · 바깥 API(Worker · Gemini 등)는 라우트 없음 = 캐시 안 함. `skipWaiting` + `clientsClaim`. activate 때 옛 `biztr-shell-*` 캐시 삭제. 공유 받기(`/share-target` POST → `biztr-share` 캐시 → `./?share=1`) 코드는 그대로, 라우트만 맨 앞에 등록. `index.html` · `js/app.js` 등록 코드는 안 건드림(업데이트 알림은 원래 없었음).
+함정: ① 공유 코드를 옮기다 `const SHARE_CACHE` 가 두 번 선언돼 첫 푸시(ac44185)는 문법 오류였다 → `node --check` 를 푸시 전에 안 돌린 탓. 4c7e331 로 바로 고침. ② 주소 꼬리(`?share=1`)가 캐시 이름에 섞이지 않게 플러그인으로 뺐다.
+확인: 배포된 sw.js 에 workbox 포함 · 등록 scope `/program_trans/` 상태 activated · controller true · caches = biztr-html, biztr-static, biztr-assets · manifest share_target action `./share-target` = sw 경로와 같음. 공유 POST 를 실제로 보내는 시험은 안 했다(안드로이드 기기 필요).
+되돌리기: `git revert 4c7e331 ac44185` (옛 sw.js 는 3d09f01).
+다음에 할 것
+- [ ] 안드로이드에서 «공유 → Biz 번역» 한 번 해 보기
