@@ -6,7 +6,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.4.1/workbox
 self.skipWaiting();
 workbox.core.clientsClaim();
 
-const SHARE_CACHE = "biztr-share";
+
 // 다른 앱에서 「공유 → Biz 번역」 (안드로이드, manifest 의 share_target).
 // 카톡 · Zalo · 갤러리 · 캡처 도구에서 보낸 사진을 잠깐 맡아 두고, 앱을 열어 첫 화면에서 꺼내 간다.
 const SHARE_CACHE = "biztr-share";
