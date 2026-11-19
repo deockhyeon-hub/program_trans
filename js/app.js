@@ -39,6 +39,81 @@ function activeRoom() {
   return rooms.find((r) => r.id === state.activeRoomId) ?? rooms[0];
 }
 
+/* ---------- 한 방 모드 (2026-11-19 시험) ----------
+ * 대표: 「베트남 · 영어 상관없이 채팅방은 1개. 외국어는 국문으로, 한국어를 넣으면 영어 · 베트남어 버튼 2개.」
+ * 서버 · 저장 구조는 그대로 둔다: 언어마다 방이 하나씩 있고(영어 방 · 베트남어 방), 화면만 모든 방의 메시지를
+ * 시간순으로 한 줄에 보여 준다. 새 메시지는 그 언어의 방에 들어간다 → 언어별 말투 · 메모 · 용어집 · 앞 대화(문맥)가
+ * 섞이지 않고, 예전 화면을 쓰는 기기도 그대로 동기화된다. 켜기: 주소 끝 ?one=1 (끄기 ?one=0), 이 기기에만 저장.
+ */
+const LANG_ORDER = ["EN", "VI"];
+const oneMode = () => settings.ui === "one";
+
+// 언어별 대표 방(같은 언어 방이 여럿이면 가장 최근에 쓴 방), 영어 · 베트남어 순서 고정
+function langRooms() {
+  const byLang = new Map();
+  for (const room of liveRooms()) {
+    const last = liveMessages(room).at(-1)?.ts || room.updatedAt || 0;
+    const cur = byLang.get(room.lang);
+    if (!cur || last > cur.last) byLang.set(room.lang, { room, last });
+  }
+  const rank = (code) => { const i = LANG_ORDER.indexOf(code); return i < 0 ? 99 : i; };
+  return [...byLang.values()].map((x) => x.room).sort((a, b) => rank(a.lang) - rank(b.lang) || a.lang.localeCompare(b.lang));
+}
+const roomForLang = (lang) => langRooms().find((r) => r.lang === lang) || null;
+
+function timeline() {
+  const items = [];
+  for (const room of liveRooms()) for (const msg of liveMessages(room)) items.push({ room, msg });
+  return items.sort((a, b) => a.msg.ts - b.msg.ts);
+}
+
+// 한국어를 넣었을 때 먼저 권할 언어 = 가장 최근 대화의 언어(방금 온 메시지에 답하는 경우가 많다)
+function primaryLang() {
+  const langs = langRooms().map((r) => r.lang);
+  const last = timeline().at(-1);
+  if (last && langs.includes(last.room.lang)) return last.room.lang;
+  if (langs.includes(settings.lastLang)) return settings.lastLang;
+  return langs[0] || "EN";
+}
+
+// 외국어 글이 어느 방으로 갈지 짐작한다. 번역은 모델이 언어를 스스로 알아보므로 짐작이 틀려도 번역은 맞고,
+// 끝난 뒤 모델이 알려 준 언어(detectedLanguage)가 다르면 맞는 방으로 옮긴다(moveMessage).
+const VI_MARKS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹĩũ]/i;
+const VI_WORDS = /(?<!\p{L})(khong|ko|duoc|dc|cua|nhe|minh|roi|lam|gui|hang|bao nhieu|voi|vay|nha|oi|sao|nhu|thi|cung|dang|chua|nhung|nay|ben|san pham)(?!\p{L})/giu;
+function guessLang(text) {
+  const has = (code) => !!roomForLang(code);
+  const viWords = new Set((text.match(VI_WORDS) || []).map((w) => w.toLowerCase())).size;
+  if (has("VI") && (VI_MARKS.test(text) || viWords >= 3)) return "VI";
+  if (has("JA") && /[\u3040-\u30ff]/.test(text)) return "JA";
+  if (has("ZH") && /[\u4e00-\u9fff]/.test(text)) return "ZH";
+  if (has("EN")) return "EN";
+  return primaryLang();
+}
+
+// 모델이 돌려준 언어 이름("Vietnamese", "vi", "Tiếng Việt" …) → 언어 코드
+function langCodeOf(name) {
+  const s = String(name || "").trim().toLowerCase();
+  if (!s) return "";
+  if (/viet|việt|^vi$/.test(s)) return "VI";
+  if (/english|^en$/.test(s)) return "EN";
+  const hit = LANGUAGES.find((l) => l.code.toLowerCase() === s || s.startsWith(l.name.toLowerCase().split(" ")[0]));
+  return hit ? hit.code : "";
+}
+
+function findMessage(id) {
+  for (const room of state.rooms) {
+    const msg = room.messages.find((m) => m.id === id);
+    if (msg) return { room, msg };
+  }
+  return null;
+}
+
+// 이 방의 메시지가 지금 화면에 보이는가
+// (보통 모드도 activeRoom() 으로 비교: 새로 받은 기기는 activeRoomId 가 비어 있어 번역해도 화면이 안 바뀌던 것 고침, 11-19)
+const shown = (room) => (oneMode() ? !room.deleted : room.id === activeRoom()?.id);
+
+const langTo = (code) => `${languageByCode(code).label.replace(/\s*\(.*\)/, "")}로`;
+
 const touch = (item) => { item.updatedAt = Date.now(); };
 
 function persist({ sync = true } = {}) {
@@ -155,12 +230,36 @@ function langTag(code) {
 }
 
 function renderRooms() {
+  const newLabel = document.querySelector("#btn-new-room .tr-nav__lb");
+  if (newLabel) newLabel.textContent = oneMode() ? "언어 추가" : "새 채팅방";
+  if (oneMode()) {
+    // 목록 = 한 방(번역 채팅) + 언어별 설정(누르면 말투 · 메모 · 용어집 창)
+    const one = h("li", "tr-room on");
+    one.dataset.one = "1";
+    one.setAttribute("aria-current", "true");
+    const last = timeline().at(-1)?.msg;
+    const txt = h("div", "tr-room__txt");
+    txt.append(h("span", "tr-room__nm", "번역 채팅"), h("span", "tr-room__last", last ? (last.source || last.translation || "이미지") : "외국어는 한국어로, 한국어는 고른 언어로"));
+    one.append(h("span", "ds-tag", "전체"), txt);
+    const items = [one, h("li", "tr-room__sec tr-nav__lb", "언어별 설정")];
+    for (const room of langRooms()) {
+      const li = h("li", "tr-room cfg");
+      li.dataset.id = room.id;
+      li.title = `${room.name} · 말투 · 메모 · 용어집`;
+      const t = h("div", "tr-room__txt");
+      t.append(h("span", "tr-room__nm", room.name), h("span", "tr-room__last", `${TONE_LABEL[room.tone] || TONE_LABEL.neutral} · 누르면 설정`));
+      li.append(langTag(room.lang), t);
+      items.push(li);
+    }
+    el.roomList.replaceChildren(...items);
+    return;
+  }
   el.roomList.replaceChildren(...liveRooms().map((room) => {
     const lang = languageByCode(room.lang);
-    const li = h("li", room.id === state.activeRoomId ? "tr-room on" : "tr-room");
+    const li = h("li", room.id === activeRoom()?.id ? "tr-room on" : "tr-room");
     li.dataset.id = room.id;
     li.title = room.name;
-    if (room.id === state.activeRoomId) li.setAttribute("aria-current", "true");
+    if (room.id === activeRoom()?.id) li.setAttribute("aria-current", "true");
     const last = liveMessages(room).at(-1);
     const preview = last ? (last.source || last.translation || "이미지") : `한국어 ↔ ${lang.label}`;
     const txt = h("div", "tr-room__txt");
@@ -184,7 +283,21 @@ function renderMe() {
   $("me-ico").parentElement.title = `${name} · ${$("me-role").textContent}`;
 }
 
+const deskHint = document.querySelector(".tr-composer__hint.tr-desk") || {};
+const DESK_HINT = deskHint.textContent || "";
+
 function renderHead() {
+  if (oneMode()) {
+    const labels = langRooms().map((r) => languageByCode(r.lang).label);
+    el.roomName.textContent = "번역 채팅";
+    el.roomMeta.textContent = `외국어 → 한국어 · 한국어 → ${labels.join(" · ")}`;
+    el.input.placeholder = "한국어 또는 외국어로 입력하세요";
+    $("btn-room-settings").textContent = "언어별 설정";
+    deskHint.textContent = "Enter = 진한 단추 · Shift+Enter 줄바꿈 · 외국어는 한국어로, 한국어는 고른 언어로 · 사진은 캡처 뒤 Ctrl+V";
+    return;
+  }
+  $("btn-room-settings").textContent = "채팅방 설정";
+  deskHint.textContent = DESK_HINT;
   const room = activeRoom();
   if (!room) return;
   const lang = languageByCode(room.lang);
@@ -215,7 +328,7 @@ function imagesNode(msg) {
   return box;
 }
 
-function messageNode(msg) {
+function messageNode(msg, room = activeRoom()) {
   const side = msg.direction === "ko->target" ? "me" : "partner";
   const node = h("article", `tr-msg ${side}${msg.status === "done" ? "" : ` ${msg.status}`}`);
   node.dataset.id = msg.id;
@@ -249,7 +362,8 @@ function messageNode(msg) {
 
   const tools = h("div", "tr-tools");
   if (msg.status === "done") {
-    const lang = languageByCode(activeRoom().lang).label;
+    const lang = languageByCode(room.lang).label;
+    if (oneMode()) tools.append(langTag(room.lang));
     tools.append(h("span", "tr-dir", msg.direction === "ko->target" ? `한국어 → ${lang}` : `${lang} → 한국어`));
     tools.append(iconButton("copy", "번역문 복사"), iconButton("retry", "다시 번역"));
   } else {
@@ -264,6 +378,23 @@ function messageNode(msg) {
 }
 
 function renderMessages({ scroll = true } = {}) {
+  if (oneMode()) {
+    const items = timeline();
+    if (!items.length) {
+      const empty = h("div", "tr-empty");
+      const labels = langRooms().map((r) => `「${langTo(r.lang)}」`).join(" ");
+      empty.append(
+        h("strong", "", "한 방에서 모든 언어를 번역합니다"),
+        h("p", "", "외국어를 넣으면 한국어로 번역합니다."),
+        h("p", "", `한국어를 넣으면 ${labels} 단추가 나옵니다. 누른 언어로 번역합니다.`),
+      );
+      el.messages.replaceChildren(empty);
+      return;
+    }
+    el.messages.replaceChildren(...items.map(({ room, msg }) => messageNode(msg, room)));
+    if (scroll) el.messages.scrollTop = el.messages.scrollHeight;
+    return;
+  }
   const room = activeRoom();
   if (!room) return;
   const list = liveMessages(room);
@@ -289,6 +420,34 @@ function renderAll() {
   renderRooms();
   renderHead();
   renderMessages();
+  updateComposer();
+}
+
+// 한 방 모드 입력칸 단추: 한국어면 「영어로」 「베트남어로」(칠한 쪽 = Enter), 외국어면 「한국어로」 하나.
+let langBtnKey = "";
+function updateComposer() {
+  const box = $("lang-btns");
+  if (!box || !state) return;
+  const text = el.input.value.trim();
+  const korean = oneMode() && !attachments.length && !!text && looksKorean(text);
+  box.hidden = !korean;
+  el.send.hidden = korean;
+  el.send.textContent = oneMode() && text && !attachments.length ? "한국어로" : "번역";
+  if (!korean) return;
+  const primary = primaryLang();
+  const langs = langRooms().map((r) => r.lang);
+  const key = `${langs.join(",")}|${primary}|${desktopPointer.matches}`;
+  if (key === langBtnKey) return;
+  langBtnKey = key;
+  box.replaceChildren(...langs.map((code) => {
+    const btn = h("button", code === primary ? "ds-btn pri tr-langbtn" : "ds-btn tr-langbtn");
+    btn.type = "button";
+    btn.dataset.lang = code;
+    btn.title = `${langTo(code)} 번역${code === primary ? " (Enter)" : ""}`;
+    btn.append(h("span", "tr-langbtn__code", code), h("span", "", langTo(code)));
+    if (code === primary && desktopPointer.matches) btn.append(h("kbd", "tr-langbtn__key", "Enter"));
+    return btn;
+  }));
 }
 
 /* ---------- 번역 ---------- */
@@ -333,7 +492,7 @@ function nearBottom() {
 }
 
 function paintLive(room, msg) {
-  if (!state || room.id !== state.activeRoomId) return;
+  if (!state || !shown(room)) return;
   livePending.add(msg);
   if (liveFrame) return;
   liveFrame = requestAnimationFrame(() => {
@@ -374,19 +533,20 @@ function applySource(room, msg, text) {
   touch(msg);
   persist();
   renderRooms();
-  if (room.id === state.activeRoomId) renderMessages({ scroll: nearBottom() });
+  if (shown(room)) renderMessages({ scroll: nearBottom() });
 }
 
 async function runTranslation(room, msg) {
   msg.status = "pending";
   msg.error = "";
   msg.partial = "";
-  if (room.id === state.activeRoomId) renderMessages();
+  if (shown(room)) renderMessages();
 
   // 이미지 원본은 찍은 기기에만 있다. 다른 기기면 추출된 글자만으로 다시 번역한다.
   let images = [];
+  let stored = [];
   if (msg.images?.length) {
-    const stored = await loadImages(msg.id).catch(() => []);
+    stored = await loadImages(msg.id).catch(() => []);
     images = (stored || []).map(toPayload);
     if (!images.length && !msg.source) {
       Object.assign(msg, {
@@ -395,11 +555,12 @@ async function runTranslation(room, msg) {
       });
       touch(msg);
       persist();
-      if (room.id === state.activeRoomId) renderMessages();
+      if (shown(room)) renderMessages();
       return;
     }
   }
 
+  let moveTo = null;
   try {
     const history = liveMessages(room).slice(0, liveMessages(room).indexOf(msg));
     const result = await translate({
@@ -437,6 +598,11 @@ async function runTranslation(room, msg) {
       autoRetry: false,
       autoTries: 0,
     });
+    // 한 방 모드: 짐작한 방과 모델이 알아본 언어가 다르면(예: 성조 없는 베트남어 · 영어 메일 캡처) 맞는 방으로 옮긴다.
+    if (oneMode() && result.direction === "target->ko") {
+      const code = langCodeOf(result.detectedLanguage);
+      if (code && code !== room.lang) moveTo = roomForLang(code);
+    }
   } catch (err) {
     if (err.status === 401) {
       handleSignedOut("로그인이 만료되었습니다. 다시 로그인해 주세요.");
@@ -454,20 +620,47 @@ async function runTranslation(room, msg) {
 
   // 번역 중에 메시지나 채팅방이 삭제됐을 수 있다.
   if (!state.rooms.includes(room) || !room.messages.includes(msg)) return;
+  if (moveTo && moveTo !== room) {
+    // 번역 중에 동기화로 이미 서버에 갔을 수 있어(서버는 방을 바꾸지 않는다) 새 메시지로 옮기고 원래 것은 지운 표시만 남긴다.
+    const copy = newMessage(msg.source, msg.direction);
+    Object.assign(copy, { translation: msg.translation, note: msg.note, status: msg.status, error: "", ts: msg.ts, userNote: msg.userNote || "" });
+    if (msg.images?.length) {
+      // 사진 원본(이 기기 IndexedDB)도 새 메시지 번호로 옮긴다. saveImages 는 메모리에 바로 넣어 썸네일이 곧바로 보인다.
+      copy.images = msg.images;
+      if (stored.length) saveImages(copy.id, stored);
+      removeImages(msg.id);
+    }
+    moveTo.messages.push(copy);
+    touch(moveTo);
+    msg.deleted = true;
+  }
   touch(msg);
   persist();
   renderRooms();
-  if (room.id === state.activeRoomId) renderMessages();
+  if (shown(room)) renderMessages();
 }
 
-function send() {
+// targetLang: 한 방 모드에서 「영어로」 「베트남어로」 단추로 고른 언어(없으면 칠한 단추 = primaryLang)
+function send(targetLang) {
   const text = el.input.value.trim();
   const images = attachments;
   if (!text && !images.length) return;
-  const room = activeRoom();
+  let room = activeRoom();
+  const direction = looksKorean(text) ? "ko->target" : "target->ko";
+  if (oneMode()) {
+    let lang;
+    if (images.length) lang = primaryLang();                 // 사진: 외국어면 한국어로, 한국어면 이 언어로(모델이 방향을 정함)
+    else if (direction === "ko->target") lang = typeof targetLang === "string" ? targetLang : primaryLang();
+    else lang = guessLang(text);
+    room = roomForLang(lang) || langRooms()[0] || room;
+    if (direction === "ko->target" && !images.length && room) {
+      settings.lastLang = room.lang;
+      saveSettings(settings);
+    }
+  }
   if (!room) return;
 
-  const msg = newMessage(images.length ? "" : text, looksKorean(text) ? "ko->target" : "target->ko");
+  const msg = newMessage(images.length ? "" : text, direction);
   if (images.length) {
     msg.images = images.map(toMeta);
     msg.userNote = text;          // 함께 적은 말은 번역 대상이 아니라 지시로 다룬다
@@ -476,9 +669,11 @@ function send() {
   }
 
   room.messages.push(msg);
+  touch(room);
   el.input.value = "";
   setAttachments([]);
   autosize();
+  if (oneMode()) renderRooms();
   persist({ sync: false });
   runTranslation(room, msg);
 }
@@ -487,6 +682,7 @@ function send() {
 
 function setAttachments(list) {
   attachments = list;
+  updateComposer();
   const box = el.attachments;
   if (!attachments.length) {
     box.replaceChildren();
@@ -537,7 +733,7 @@ function hasFiles(event) {
 
 /* ---------- 클립보드 붙여넣기 (2026-10-23) ----------
  * ① 대화창에 마우스를 올리면 입력칸에 커서가 간다 → 캡처 뒤 바로 Ctrl+V.
- * ② (11-19 대표 지시로 붙여넣기 단추는 뷐다. 허락은 「복사한 사진 바로 보기 켜기」 안내 · 설정에서 받는다.)
+ * ② (11-19 대표 지시로 붙여넣기 단추는 뺐다. 허락은 「복사한 사진 바로 보기 켜기」 안내 · 설정에서 받는다.)
  * ③ 읽기 허락을 한 번 받은 뒤에는, 창으로 돌아오거나 마우스를 올리면 새로 복사한 이미지를
  *    알약(복사한 이미지 붙여넣기)으로 띄운다. 누르면 붙는다.
  */
@@ -725,7 +921,9 @@ function selectRoom(id) {
 
 function openRoomDialog(room) {
   editingRoomId = room?.id ?? null;
-  $("dlg-room-title").textContent = room ? "채팅방 설정" : "새 채팅방";
+  $("dlg-room-title").textContent = oneMode()
+    ? (room ? `${languageByCode(room.lang).label} 설정` : "언어 추가")
+    : (room ? "채팅방 설정" : "새 채팅방");
   $("room-f-name").value = room?.name ?? "";
   $("room-f-lang").value = room?.lang ?? "EN";
   $("room-f-tone").value = room?.tone ?? "neutral";
@@ -962,7 +1160,12 @@ function bindEvents() {
   $("auth-toggle").addEventListener("click", () => setAuthMode(authMode === "signup" ? "login" : "signup"));
 
   $("btn-new-room").addEventListener("click", () => openRoomDialog(null));
-  $("btn-room-settings").addEventListener("click", () => openRoomDialog(activeRoom()));
+  $("btn-room-settings").addEventListener("click", () => {
+    if (!oneMode()) return openRoomDialog(activeRoom());
+    // 한 방 모드: 휴대폰은 메뉴(언어별 설정 목록), PC 는 지금 주로 쓰는 언어의 설정 창
+    if (matchMedia("(max-width:700px)").matches) return openSidebar();
+    return openRoomDialog(roomForLang(primaryLang()));
+  });
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-logout").addEventListener("click", signOut);
   $("btn-nav-mini").addEventListener("click", () => setNavMini(!el.app.classList.contains("mini")));
@@ -971,8 +1174,15 @@ function bindEvents() {
   el.backdrop.addEventListener("click", closeSidebar);
 
   el.roomList.addEventListener("click", (e) => {
-    const li = e.target.closest("li[data-id]");
-    if (li) selectRoom(li.dataset.id);
+    const li = e.target.closest("li[data-id], li[data-one]");
+    if (!li) return;
+    if (li.dataset.one) { closeSidebar(); return; }
+    if (oneMode()) {
+      closeSidebar();
+      openRoomDialog(state.rooms.find((r) => r.id === li.dataset.id));
+      return;
+    }
+    selectRoom(li.dataset.id);
   });
 
   el.messages.addEventListener("click", (e) => {
@@ -983,9 +1193,9 @@ function bindEvents() {
     }
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
-    const room = activeRoom();
-    const msg = room.messages.find((m) => m.id === btn.closest(".tr-msg").dataset.id);
-    if (!msg) return;
+    const found = findMessage(btn.closest(".tr-msg").dataset.id);
+    if (!found) return;
+    const { room, msg } = found;
     if (btn.dataset.action === "copy") copyText(msg.translation);
     if (btn.dataset.action === "retry") {
       msg.autoTries = 0; // 사람이 누른 재시도는 자동 횟수를 되돌린다
@@ -1003,8 +1213,12 @@ function bindEvents() {
 
   el.dlgImage.addEventListener("click", () => el.dlgImage.close());
 
-  el.send.addEventListener("click", send);
-  el.input.addEventListener("input", autosize);
+  el.send.addEventListener("click", () => send());
+  el.input.addEventListener("input", () => { autosize(); updateComposer(); });
+  $("lang-btns")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-lang]");
+    if (btn) send(btn.dataset.lang);
+  });
 
   // 이미지 첨부: 버튼 / 붙여넣기 / 드래그 앤 드롭 세 가지
   $("btn-attach").addEventListener("click", () => el.fileImage.click());
@@ -1222,6 +1436,14 @@ function init() {
   }));
   if (/iPad|iPhone|iPod/.test(navigator.userAgent)) document.documentElement.classList.add("is-ios");
   if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add("is-android");
+  // 한 방 모드 켜기 · 끄기: 주소 끝 ?one=1 · ?one=0 (이 기기에 저장하고 주소에서 뛴다)
+  const query = new URLSearchParams(location.search);
+  if (query.has("one")) {
+    settings.ui = query.get("one") === "0" ? "" : "one";
+    saveSettings(settings);
+    query.delete("one");
+    history.replaceState(null, "", location.pathname + (query.toString() ? `?${query}` : ""));
+  }
 
   applyDisplay(settings);
   initNavMini();
