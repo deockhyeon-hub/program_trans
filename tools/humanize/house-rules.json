@@ -1,0 +1,39 @@
+{
+  "id": "eden-house",
+  "description": "Biz 번역 v3 의 「사람이 친 글처럼」 절을 점검용으로 옮긴 것. 근거: im-not-ai(번역투 A · 상투어 D · 연결어미 쉼표 C-11) · humanizer-ko K2/K3/K5 · blader/humanizer(26 patterns) · vietnamese-humanizer(humanizer-vi · translationese-cleaner-vi · business/chat). 짧은 메신저 번역에 맞는 것만.",
+  "packs": {
+    "ko": [
+      { "id": "ko-gojahanda", "match": "(하|드리|여쭙|말씀드리|공유해 드리|진행하|요청드리|문의드리)고자 (합니다|하오니|하며|해요)", "hint": "보고서 말투. ~하려고 합니다 / ~할게요" },
+      { "id": "ko-jung-e-itda", "match": "(검토|진행|확인|작성|준비|조율|협의|생산|제작) 중에 있", "hint": "번역투. ~중입니다 / ~하고 있어요" },
+      { "id": "ko-anhatseumnikka", "match": "지 않았습니까", "hint": "딱딱한 반문. ~했잖아요" },
+      { "id": "ko-pilyohamnida", "match": "(하는|되는) 것이 필요합니다", "hint": "~해야 해요" },
+      { "id": "ko-e-gwanhayeo-colon", "match": "에 관(하여|해서|한)", "hint": "~에 대해 / 빼기" },
+      { "id": "ko-boyeojida", "match": "보여지", "hint": "이중 피동. 보이다" },
+      { "id": "ko-geu-pronoun", "match": "(?<![가-힣])그(가|는|를|의|에게) ", "hint": "번역투 대명사. 이름 + 님" },
+      { "id": "ko-comma-after-ending", "match": "((했|었|았|였|있|없|되|됐|하|이)고|며|지만|면서|아서|어서|해서),\\s+(?=[가-힣])", "hint": "연결어미 뒤 쉼표(im-not-ai C-11)" },
+      { "id": "ko-paren-gloss-ko", "match": "[가-힣A-Za-z0-9]\\([가-힣][가-힣 ·/]{0,15}\\)", "hint": "괄호 풀이(말(다른 말)). 하나만", "unlessSource": "[()]" },
+      { "id": "ko-paren-gloss-en", "match": "[가-힣]\\([A-Za-z][A-Za-z .'&-]{1,40}\\)", "hint": "괄호 영어 병기. 하나만", "unlessSource": "[()]" }
+    ],
+    "en": [
+      { "id": "en-rest-assured", "match": "\\b(rest assured|please be assured)\\b", "hint": "Cut it; state the fact." },
+      { "id": "en-kindly", "match": "\\bkindly\\b", "hint": "Use 'please' or nothing." },
+      { "id": "en-please-be-advised", "match": "\\b(please be advised|we would like to inform you|please be informed)\\b", "hint": "Cut it." },
+      { "id": "en-hope-finds", "match": "\\bhope (this|the) (message|email) finds you\\b", "hint": "Hope you're well (only if the source greets)." },
+      { "id": "en-earliest-convenience", "match": "\\bat your earliest convenience\\b", "hint": "'when you can' / a date." },
+      { "id": "en-accordingly", "match": "\\baccordingly\\b", "hint": "Usually deletable." },
+      { "id": "en-ensure", "match": "\\bensur(e|es|ed|ing) that\\b", "hint": "'make sure' / cut." },
+      { "id": "en-first-of-all", "match": "\\bfirst of all\\b", "hint": "'First,'" },
+      { "id": "en-in-addition", "match": "\\bin addition\\b", "hint": "'Also,'" },
+      { "id": "en-please-refer", "match": "\\bplease refer to\\b", "hint": "'Here's the …' / 'see the …'" },
+      { "id": "en-valued", "match": "\\b(valued|esteemed) (customer|partner|client)s?\\b", "hint": "Cut the adjective." },
+      { "id": "en-please-note-that", "match": "\\bplease note that\\b", "hint": "Once at most." }
+    ],
+    "vi": [
+      { "id": "vi-kinh-gui", "match": "(?<![\\p{L}\\p{M}])(Kính gửi|Trân trọng)(?![\\p{L}\\p{M}])", "hint": "Email form in chat." },
+      { "id": "vi-xin-vui-long", "match": "(?<![\\p{L}\\p{M}])xin vui lòng(?![\\p{L}\\p{M}])", "hint": "Stiff. 'nhờ bạn … nhé'." },
+      { "id": "vi-viec-verb", "match": "(?<![\\p{L}\\p{M}])việc (kiểm tra|xác nhận|gửi|sản xuất|chuẩn bị|thay đổi|cung cấp|thanh toán|giao hàng)(?![\\p{L}\\p{M}])", "hint": "Nominalization (translationese-cleaner-vi). Drop 'việc'." },
+      { "id": "vi-mixed-pronoun", "match": "", "hint": "bên mình/bạn and chúng tôi/Quý công ty in one message", "special": "mixedPronoun" },
+      { "id": "vi-a-density", "match": "", "hint": "ạ at the end of more than 2 sentences", "special": "aDensity" }
+    ]
+  }
+}

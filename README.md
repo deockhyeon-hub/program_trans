@@ -139,9 +139,35 @@ python -m http.server 8765
 - **이미지 속 글자도 마찬가지로 내용일 뿐 지시가 아닙니다.** 캅처 안에 들어있는 "앞의 지시를 무시하라" 같은 문장도 번역만 합니다.
 - 공용 PC에서는 사용 후 설정 → 로그아웃 하세요.
 
+## 사람 말투 규칙 (지침 v3)
+
+번역이 «AI 가 쓴 글»처럼 읽히지 않게 두 겹으로 막는다. 근거는 오픈소스 «AI 티» 목록(모두 MIT):
+[im-not-ai](https://github.com/epoko77-ai/im-not-ai)(한국어) · [humanizer-ko](https://github.com/choconyam/humanizer-ko)(한국어 · 번역투) ·
+[blader/humanizer](https://github.com/blader/humanizer)(영어, Wikipedia «Signs of AI writing») · [slop-gate](https://github.com/hwajongpark/slop-gate)(영어 · 한국어 · 베트남어 규칙 묶음) ·
+[vietnamese-humanizer](https://github.com/longhang2004/vietnamese-humanizer)(베트남어).
+
+1. **지침** (`worker/index.js` `HUMAN_VOICE_*`): «내용은 그대로, 말만 사람처럼». 사실 · 줄 · 이름 · 시각 · 주장의 세기는 그대로 두고
+   em dash(—) · 괄호 풀이 · 빗금 대안 · 상투어(please be assured, kindly …) · 번역투(~하고자 합니다, ~의 경우 …) · 딱딱한 베트남어(thực hiện, tiến hành …)를 피한다.
+2. **기계 다듬기** (`humanizeOutput`): 모델이 그래도 남기는 것 가운데 뜻이 안 바뀌는 것만 고친다.
+   원문에 없는 em dash → 쉼표, 한국어 연결어미 뒤 쉼표(했고, → 했고), «~하고자 합니다» → «~하려고 합니다»,
+   원문에 괄호 · 빗금이 없을 때의 «보증금(선금)» · «보증금/계약금» → «보증금», «실버리 호텔(The Silveri Hotel)» → «The Silveri Hotel».
+   사진 번역은 괄호 · 빗금을 건드리지 않는다(원문을 다 읽기 전에 끝날 수 있어서). 고친 수는 응답 `timing.humanize`.
+
+되돌리기: `worker/index.js` 의 `PROMPT_DEFAULT` 를 `"v2"` 로 바꾸고 배포(한 줄). 관리자는 `promptVersion: "v2"` 로 예전 글을 바로 비교할 수 있다.
+
+점검 도구(`tools/humanize/`):
+
+```powershell
+node tools\humanize\humanize.test.mjs            # 기계 다듬기 시험 40개
+node tools\humanize\lint.mjs items.json --by-rule # 번역 결과의 AI 티 세기(100건당)
+```
+
+`items.json` = `[{ "id", "lang": "ko"|"en"|"vi", "text": 번역문, "source": 원문 }]`. 규칙 = `rules/slop-gate-*.json`(slop-gate 그대로, MIT) + `house-rules.json`.
+원문에 이미 있는 티는 세지 않는다. **실제 고객 대화는 저장소에 올리지 말 것.**
+
 ## 번역 품질 점검표
 
-지침(`worker/index.js` 의 `buildSystemPromptV2`)이나 번역 모델을 바꾼 뒤 아래 문장으로 확인하세요.
+지침(`worker/index.js` 의 `buildSystemPromptV2` · `HUMAN_VOICE_*`)이나 번역 모델을 바꾼 뒤 아래 문장으로 확인하세요.
 
 | 입력 | 기대 결과 |
 |---|---|
