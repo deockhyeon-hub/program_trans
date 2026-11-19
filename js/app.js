@@ -537,7 +537,7 @@ function hasFiles(event) {
 
 /* ---------- 클립보드 붙여넣기 (2026-10-23) ----------
  * ① 대화창에 마우스를 올리면 입력칸에 커서가 간다 → 캡처 뒤 바로 Ctrl+V.
- * ② 붙여넣기 단추: 클립보드의 이미지(없으면 글)를 한 번에 붙인다. 다른 창에 있다가 와도 한 번 누르면 끝.
+ * ② (11-19 대표 지시로 붙여넣기 단추는 뷐다. 허락은 「복사한 사진 바로 보기 켜기」 안내 · 설정에서 받는다.)
  * ③ 읽기 허락을 한 번 받은 뒤에는, 창으로 돌아오거나 마우스를 올리면 새로 복사한 이미지를
  *    알약(복사한 이미지 붙여넣기)으로 띄운다. 누르면 붙는다.
  */
@@ -599,44 +599,6 @@ function insertAtCursor(input, text) {
   input.selectionStart = input.selectionEnd = start + text.length;
 }
 
-// 붙여넣기 단추
-async function pasteFromClipboard() {
-  hideClipOffer();
-  try {
-    let clip = await readClipboard({ withText: true });
-    // clipboard.read 가 없는 브라우저는 글만
-    if (!clip) clip = { files: [], text: navigator.clipboard?.readText ? await navigator.clipboard.readText() : "" };
-    if (clip.files.length) {
-      lastClipSig = await clipSig(clip.files[0]);
-      await addImageFiles(clip.files);
-      focusInputOnDesktop();
-      return;
-    }
-    // 휴대폰: 카톡 등에서 복사한 사진이 브라우저에 안 보이는 경우가 많다(삼성 키보드만 아는 클립보드).
-    // 예전에 복사한 글을 잘못 붙이지 말고 곧바로 사진 고르기를 연다.
-    if (!desktopPointer.matches) {
-      toast("클립보드에서 사진을 찾지 못해 사진 고르기를 엽니다. 카톡 사진은 「공유 → Biz 번역」 이 가장 빠릅니다.");
-      el.fileImage.click();
-      return;
-    }
-    if (clip.text) {
-      insertAtCursor(el.input, clip.text);
-      autosize();
-      el.input.focus();
-      return;
-    }
-    toast("복사한 사진이나 글이 없습니다. 캡처(Win+Shift+S)하거나 복사한 뒤 눌러 주세요.");
-  } catch (err) {
-    if (!desktopPointer.matches) {
-      toast(`클립보드를 읽지 못해(${err?.name || "오류"}) 사진 고르기를 엽니다. 카톡 사진은 「공유 → Biz 번역」 이 가장 빠릅니다.`);
-      el.fileImage.click();
-      return;
-    }
-    toast(`브라우저가 클립보드 읽기를 막았습니다(${err?.name || "오류"}). 대화창에서 Ctrl+V 로 붙여 주세요.`);
-    focusInputOnDesktop();
-  }
-}
-
 // 클립보드 읽기 허락 상태: "granted" | "prompt" | "denied" | ""(알 수 없음: 아이폰 사파리 · 파이어폭스)
 let clipPermWatched = false;
 const CLIP_ASK_OFF = "biztr.clipAsk.off";
@@ -675,7 +637,7 @@ async function enableClipPreview() {
   }
   const state = await clipPermission();
   if (state === "granted") {
-    toast("켜졌습니다. 이제 캐처 · 복사하고 돌아오면 사진 미리보기가 뜹니다.");
+    toast("켜졌습니다. 이제 캡처 · 복사하고 돌아오면 사진 미리보기가 뜹니다.");
     if (files?.length) { clipCheckedAt = 0; checkClipboardOffer(); }
     return;
   }
@@ -852,6 +814,17 @@ function openSettings() {
   $("set-invite-result").hidden = true;
   $("set-invite-result").textContent = "";
   el.dlgSettings.showModal();
+  // 복사한 사진 바로 보기: 허락 상태를 알 수 있는 브라우저(PC · 안드로이드 크롬)에서만
+  const clipSec = $("set-clip");
+  if (clipSec) {
+    clipPermission().then((state) => {
+      clipSec.hidden = !state;
+      $("set-clip-state").textContent = state === "granted" ? "켜져 있습니다. 캡처 · 복사하고 돌아오면 입력칸 위에 미리보기가 뜹니다."
+        : state === "denied" ? "브라우저에서 막혀 있습니다. 주소창 왼쪽 아이콘(휴대폰은 크롬 ⋮ → 설정 → 사이트 설정) → 클립보드 → 허용."
+        : "캡처 · 복사한 사진을 입력칸 위에 미리 보여 줍니다. 처음 한 번 「허용」이 필요합니다.";
+      $("set-clip-on").hidden = state !== "prompt";
+    });
+  }
 }
 
 async function issueInvites() {
@@ -1062,7 +1035,6 @@ function bindEvents() {
   });
 
   // 붙여넣기 단추 · 복사한 사진 미리보기 · 바로 보기 켜기 안내
-  $("btn-paste").addEventListener("click", async () => { await pasteFromClipboard(); updateClipAsk(); });
   ($("clip-offer-btn") || el.clipOffer).addEventListener("click", () => {
     if (!offer) return;
     const { file, sig } = offer;
@@ -1080,7 +1052,13 @@ function bindEvents() {
   $("clip-ask-x")?.addEventListener("click", () => {
     localStorage.setItem(CLIP_ASK_OFF, "1");
     el.clipAsk.hidden = true;
-    toast("나중에 켜려면 붙여넣기 단추를 한 번 눌러 「허용」하면 됩니다.");
+    toast("나중에 켜려면 설정(톱니바퀴) → 「복사한 사진 바로 보기 켜기」 를 누르세요.");
+  });
+  // 설정 창에서 다시 켜기(안내를 닫았거나 허락 창을 놓쳤을 때)
+  $("set-clip-on")?.addEventListener("click", async () => {
+    localStorage.removeItem(CLIP_ASK_OFF);
+    el.dlgSettings.close();
+    await enableClipPreview();
   });
   // 안드로이드 크롬: 입력칸을 「사진도 받는 칸」으로 알린다(-webkit-user-modify: read-write).
   // 그러면 입력칸을 길게 눌러 「붙여넣기」 했을 때 사진이 paste 이벤트로 온다. 크롬이 키보드 사진 넣기

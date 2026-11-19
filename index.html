@@ -129,7 +129,7 @@
         <!-- 미리보기를 켜는 한 번짜리 안내: 누르면 브라우저가 「클립보드 허용」 을 묻는다 -->
         <div id="clip-ask" class="tr-clip tr-clip--ask" hidden>
           <button id="clip-ask-on" class="tr-clip__main" type="button">
-            <span><b>복사한 사진 바로 보기 켜기</b><small>캐처 · 복사하고 돌아오면 여기 미리보기가 뜹니다. 처음 한 번 「허용」을 눌러 주세요.</small></span>
+            <span><b>복사한 사진 바로 보기 켜기</b><small>캡처 · 복사하고 돌아오면 여기 미리보기가 뜹니다. 처음 한 번 「허용」을 눌러 주세요.</small></span>
           </button>
           <button id="clip-ask-x" class="ds-x" type="button" aria-label="안내 닫기">✕</button>
         </div>
@@ -138,15 +138,11 @@
                   title="이미지 첨부 — 끌어다 놓거나 Ctrl+V로 붙여넣어도 됩니다">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M4 17l4.5-4.5a1.8 1.8 0 0 1 2.5 0L15.5 17"/><path d="M14 15l1.5-1.5a1.8 1.8 0 0 1 2.5 0l2 2"/></svg>
           </button>
-          <button id="btn-paste" class="ds-ib" type="button" aria-label="복사한 이미지 붙여넣기"
-                  title="복사한 이미지 · 글 붙여넣기 (캡처한 뒤 누르면 바로 붙습니다)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 14l2 2 4-4"/></svg>
-          </button>
           <textarea id="input" rows="1" placeholder="한국어 또는 상대 언어로 입력하세요"></textarea>
           <button id="btn-send" class="ds-btn pri" type="button" aria-label="번역">번역</button>
         </div>
         <p class="tr-composer__hint tr-desk">Enter 번역 · Shift+Enter 줄바꿈 · 사진은 캡처(Win+Shift+S)한 뒤 대화창 아무 데서나 Ctrl+V</p>
-        <p class="tr-composer__hint tr-mob">복사한 사진은 미리보기를 누르거나 입력칸을 길게 눌러 「붙여넣기」 · 갤러리 캐처는 사진 단추 · 카톡 사진은 「공유 → Biz 번역」</p>
+        <p class="tr-composer__hint tr-mob">복사한 사진은 미리보기를 누르거나 입력칸을 길게 눌러 「붙여넣기」 · 갤러리 캡처는 사진 단추 · 카톡 사진은 「공유 → Biz 번역」</p>
         <input id="file-image" type="file" accept="image/*" multiple hidden>
       </footer>
     </main>
@@ -268,16 +264,22 @@
         </div>
         <p class="tr-hint only-ios">iPhone · iPad: Safari 공유 단추 → 「홈 화면에 추가」로 설치한 뒤 쓰세요.</p>
 
-        <!-- 안드로이드만: 키보드 클립보드의 캐처를 카톡처럼 바로 넣기 (크롬 실험 설정 하나, DEVLOG 18 · 19) -->
+        <div id="set-clip" class="tr-stack" hidden>
+          <div class="ds-modal__sec">복사한 사진 바로 보기</div>
+          <p id="set-clip-state" class="tr-hint"></p>
+          <div class="tr-row"><button id="set-clip-on" type="button" class="ds-btn">복사한 사진 바로 보기 켜기</button></div>
+        </div>
+
+        <!-- 안드로이드만: 키보드 클립보드의 캡처를 카톡처럼 바로 넣기 (크롬 실험 설정 하나, DEVLOG 18 · 19) -->
         <div class="only-android">
-          <div class="ds-modal__sec">휴대폰 캐처 바로 붙이기</div>
+          <div class="ds-modal__sec">휴대폰 캡처 바로 붙이기</div>
           <p class="tr-hint">캡처한 화면을 카톡처럼 키보드에서 바로 넣으려면 크롬 설정을 한 번 켜야 합니다.</p>
           <ol class="tr-steps">
             <li>아래 <b>주소 복사</b>를 누른다</li>
             <li>크롬 주소창을 길게 눌러 <b>붙여넣기</b> → 이동</li>
             <li>노란 칸 <b>Enable IME media insertion</b> 이 안 보이면(크롬 157): 맨 위 <b>Temporarily unexpire M155 flags</b> 를 <b>Enabled</b> → <b>Relaunch</b>. 다시 켜지면 노란 칸이 보인다</li>
             <li>노란 칸의 <b>Default</b> 를 <b>Enabled</b> 로 → 아래 <b>Relaunch</b></li>
-            <li>앱 입력칸을 누르고 키보드 클립보드의 캐처를 누른다</li>
+            <li>앱 입력칸을 누르고 키보드 클립보드의 캡처를 누른다</li>
           </ol>
           <div class="tr-row">
             <input id="set-flag-url" class="ds-input" type="text" readonly value="chrome://flags/#enable-android-media-insertion" aria-label="크롬 설정 주소">
