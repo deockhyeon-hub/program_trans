@@ -267,6 +267,22 @@
           <input id="set-f-file" type="file" accept="application/json,.json" hidden>
         </div>
         <p class="tr-hint only-ios">iPhone · iPad: Safari 공유 단추 → 「홈 화면에 추가」로 설치한 뒤 쓰세요.</p>
+
+        <!-- 안드로이드만: 키보드 클립보드의 캐처를 카톡처럼 바로 넣기 (크롬 실험 설정 하나, DEVLOG 18 · 19) -->
+        <div class="only-android">
+          <div class="ds-modal__sec">휴대폰 캐처 바로 붙이기</div>
+          <p class="tr-hint">캡처한 화면을 카톡처럼 키보드에서 바로 넣으려면 크롬 설정을 한 번 켜야 합니다.</p>
+          <ol class="tr-steps">
+            <li>아래 <b>주소 복사</b>를 누른다</li>
+            <li>크롬 주소창을 길게 눌러 <b>붙여넣기</b> → 이동</li>
+            <li>노란 칸의 <b>Default</b> 를 <b>Enabled</b> 로 → 아래 <b>Relaunch</b></li>
+            <li>앱 입력칸을 누르고 키보드 클립보드의 캐처를 누른다</li>
+          </ol>
+          <div class="tr-row">
+            <input id="set-flag-url" class="ds-input" type="text" readonly value="chrome://flags/#enable-android-media-insertion" aria-label="크롬 설정 주소">
+            <button id="set-flag-copy" type="button" class="ds-btn pri">주소 복사</button>
+          </div>
+        </div>
       </div>
       <div class="ds-modal__ft">
         <button type="button" class="ds-btn dlg-cancel">취소</button>

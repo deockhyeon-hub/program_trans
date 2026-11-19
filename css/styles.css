@@ -268,6 +268,8 @@ textarea.ds-input{min-height:0;resize:vertical}
 .tr-dlg::backdrop{background:var(--ds-bg-overlay)}
 .tr-dlg form{display:flex;flex-direction:column;max-height:calc(100dvh - 34px)}
 .tr-dlg .ds-modal__body{display:flex;flex-direction:column;gap:var(--ds-sp-4)}
+/* 내용이 길어져 팝업이 스크롤될 때 칸(테마 · 글자 크기 격자 등)이 눌려 잘리지 않게 (11-19) */
+.tr-dlg .ds-modal__body > *{flex-shrink:0}
 .tr-dlg .ds-modal__sec{margin:var(--ds-sp-2) 0 calc(-1 * var(--ds-sp-2))}
 .tr-acct{display:flex;align-items:center;justify-content:space-between;gap:var(--ds-sp-3);padding:var(--ds-sp-3);
   border:1px solid var(--ds-stroke-neutral);border-radius:var(--ds-r-card);background:var(--ds-bg-layer-basement)}
@@ -275,6 +277,9 @@ textarea.ds-input{min-height:0;resize:vertical}
 .tr-code{margin:0;padding:var(--ds-sp-3);border:1px solid var(--ds-stroke-neutral);border-radius:var(--ds-r-control);background:var(--ds-bg-layer-basement);
   font:var(--ds-fw-regular) var(--ds-fs-13)/1.5 var(--ds-code);color:var(--ds-fg-neutral);white-space:pre-wrap;word-break:break-all;user-select:all}
 .only-ios{display:none} .is-ios .only-ios{display:block}
+.only-android{display:none} .is-android .only-android{display:flex;flex-direction:column;gap:var(--ds-sp-3)}
+.tr-steps{margin:0;padding-left:1.4em;font-size:var(--ds-fs-13);line-height:1.7;color:var(--ds-fg-neutral)}
+#set-flag-url{flex:1;min-width:0;font-size:var(--ds-fs-12)}
 
 .tr-imgdlg{width:auto;max-width:calc(100vw - 24px);padding:0;border:0;background:transparent;box-shadow:none}
 .tr-imgdlg::backdrop{background:var(--ds-bg-overlay)}

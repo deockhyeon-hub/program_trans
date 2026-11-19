@@ -1168,6 +1168,19 @@ function bindEvents() {
     e.target.value = "";
   });
   $("set-f-logout").addEventListener("click", signOut);
+  // 안드로이드: 크롬 실험 설정 주소를 치지 않고 복사만 (대표: 「크롬에 입력하는 항목이 너무 많은데?」)
+  // 웹 페이지는 chrome:// 주소를 열 수 없어서 복사 → 주소창에 붙여넣기가 가장 짧다.
+  $("set-flag-copy")?.addEventListener("click", async () => {
+    const field = $("set-flag-url");
+    try {
+      await navigator.clipboard.writeText(field.value);
+    } catch {
+      field.focus();
+      field.select();
+      document.execCommand?.("copy");
+    }
+    toast("복사했습니다. 크롬 주소창을 길게 눌러 「붙여넣기」 하세요.");
+  });
   $("set-invite-create").addEventListener("click", issueInvites);
 
   // 다른 기기에서 바뀐 내용을 가져온다.
@@ -1230,6 +1243,7 @@ function init() {
     return opt;
   }));
   if (/iPad|iPhone|iPod/.test(navigator.userAgent)) document.documentElement.classList.add("is-ios");
+  if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add("is-android");
 
   applyDisplay(settings);
   initNavMini();
