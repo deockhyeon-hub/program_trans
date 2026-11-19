@@ -46,7 +46,8 @@ function activeRoom() {
  * 섞이지 않고, 예전 화면을 쓰는 기기도 그대로 동기화된다. 켜기: 주소 끝 ?one=1 (끄기 ?one=0), 이 기기에만 저장.
  */
 const LANG_ORDER = ["EN", "VI"];
-const oneMode = () => settings.ui === "one";
+// 11-19 대표 「제안대로 해줘」 → 기본값. 예전 방식은 설정 「채팅 방식」 또는 주소 ?one=0 (settings.ui = "rooms").
+const oneMode = () => settings.ui !== "rooms";
 
 // 언어별 대표 방(같은 언어 방이 여럿이면 가장 최근에 쓴 방), 영어 · 베트남어 순서 고정
 function langRooms() {
@@ -184,7 +185,8 @@ async function runSync({ silent = true } = {}) {
 function ensureRoom() {
   let changed = false;
   if (!liveRooms().length) {
-    state.rooms.push(newRoom({ name: "영어 거래처", lang: "EN" }));
+    // 처음 쓰는 계정: 한 방에서 「영어로」 「베트남어로」 단추가 둘 다 나오도록 두 언어를 만든다
+    state.rooms.push(newRoom({ name: "영어", lang: "EN" }), newRoom({ name: "베트남", lang: "VI" }));
     changed = true;
   }
   if (!activeRoom()) {
@@ -1006,6 +1008,7 @@ function openSettings() {
   $("set-f-model").value = settings.model;
   $("set-f-theme").value = settings.theme || "auto";
   $("set-f-size").value = settings.textSize === "l" || settings.textSize === "xl" ? "l" : "m";
+  if ($("set-f-ui")) $("set-f-ui").value = oneMode() ? "one" : "rooms";
   $("set-account-email").textContent = auth?.user?.email ?? "";
   $("set-account-role").textContent = auth?.user?.role === "admin" ? "관리자" : "직원";
   $("set-admin").hidden = auth?.user?.role !== "admin";
@@ -1347,8 +1350,11 @@ function bindEvents() {
       model: $("set-f-model").value,
       theme: $("set-f-theme").value,
       textSize: $("set-f-size").value,
+      ui: $("set-f-ui")?.value === "rooms" ? "rooms" : "one",
     };
     applyDisplay(settings);
+    langBtnKey = "";
+    renderAll();
     if (!saveSettings(settings)) toast("설정을 저장하지 못했습니다.");
     else toast("설정을 저장했습니다.");
   });
@@ -1439,7 +1445,7 @@ function init() {
   // 한 방 모드 켜기 · 끄기: 주소 끝 ?one=1 · ?one=0 (이 기기에 저장하고 주소에서 뛴다)
   const query = new URLSearchParams(location.search);
   if (query.has("one")) {
-    settings.ui = query.get("one") === "0" ? "" : "one";
+    settings.ui = query.get("one") === "0" ? "rooms" : "one";
     saveSettings(settings);
     query.delete("one");
     history.replaceState(null, "", location.pathname + (query.toString() ? `?${query}` : ""));
