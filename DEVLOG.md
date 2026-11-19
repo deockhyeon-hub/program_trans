@@ -608,7 +608,7 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 - [ ] 안드로이드에서 «공유 → Biz 번역» 한 번 해 보기
 
 
-### 16 · 11-19 21:15 — 번역 말투 「사람처럼」: 지침 v3 + 기계 다듬기 + AI 티 점검 도구 (배포 대기)
+### 16 · 11-19 21:15 — 번역 말투 「사람처럼」: 지침 v3 + 기계 다듬기 + AI 티 점검 도구
 
 대표 지시(11-19): 「깃허브 오픈소스 및 툴 활용해서 번역 답변 사람처럼 규칙 설정해줘」(예: 아임낫에이아이).
 까닭 = Gemini 로 바꾼 뒤에도 번역에 em dash(—) · 「please be assured / First of all」 · 「~하고자 합니다 / ~의 경우」 · 「보증금(선금)」 같은 괄호 풀이가 남아 AI 가 쓴 티가 났다.
@@ -659,6 +659,24 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 | 워커 모의 시험(11-06 것) | — | 33/33 |
 | 기계 다듬기 시험 | — | 40/40 |
 
+**배포 (11-19 21:20, 대표 「배포해줘」)**
+
+- 대표님이 Cloudflare 에 로그인해 둔 브라우저에서 `wrangler login --browser=false` → 동의 화면 Authorize → `wrangler deploy` → 끝나고 **`wrangler logout`**(이 PC 에 토큰 안 남김, `whoami` → not authenticated 확인).
+- 워커 버전 `ceef27ce-e69b-45a4-81c9-5a4b72fca5ac`(이전 `be9e366c`). 앱(Pages)은 안 바뀜(지침은 워커에만 있음).
+
+| 실서버 확인 | 결과 |
+|---|---|
+| `/api/health?where=1` | 200 · `ai.model gemini-3.8-flash` · `gemini true` · `runs NRT` |
+| v3 가 켜졌나 | 응답 `timing.humanize` 가 있음(v3 일 때만 생김) — 6건 모두 |
+| 글 5건(앱 탭에서, 흘려받기) | 첫 글자 2.0~4.3초 · 끝 2.3~4.5초 · 모두 Gemini(예비 0) |
+| 「견적서 검토 부탁드립니다.」 | 「Could you take a look at the quotation and let us know what you think?」 |
+| 「그럼 수고하세요!」 | 「Thanks, have a great day!」 |
+| 「Nhà nay có bảo cọc không」 | 「여기 보증금 요구하나요?」(괄호 1개 기계로 지움) |
+| 베트남어 부탁(피드백 엑셀로) | 「… gửi một lần giúp bên mình nhé.」(공손한 부탁 유지) |
+| 사진(README 메일) 3번 | 끝 12.0 · 9.3 · 5.8초(예전 6.5~8.5) — 들쭉날쭉. 숫자 · FOB Busan · 12월 15일 그대로. 입력 4,466 토큰 중 2,529 캐시 적중 |
+
+되돌리기: `worker/index.js` `PROMPT_DEFAULT = "v2"` → 배포(한 줄).
+
 **밟은 함정 · 실패한 시도**
 
 - 첫 v3(정확도 닻 없음)는 한국어로 번역이 **더 자연스럽지만 덜 정확**했다(자연스러움 22:7, 정확도 8:16). 「I'm sure」 → 「~라고 봅니다」(약하게), 「직접 · 업그레이드 · 답답하고」 덧붙임, 붙여 넣은 채팅의 시각 · 머리줄 빠짐.
@@ -669,11 +687,12 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 - 영어 「Please review the quotation.」(11-06 부터 알던 직역투)은 지침에 예시 3줄(검토 부탁 · 확인 후 회신 · 수고하세요)을 넣어서야 바뀜.
 - PowerShell `Set-Content -Encoding` 이 이 셸에서 안 먹고, 워커 파일이 CRLF 라 LF 로 찾으면 0건 → node 로 줄바꿈 맞춰 바꾸는 작은 도구를 썼다.
 - 집 PC 에서 4개씩 동시에 돌리면 Gemini 「connect timeout」 이 가끔 남(→ Claude 예비로 넘어가려다 로컬엔 Claude 키가 없어 502). 다시 돌려 99/99 · 40/40 · 48/48 채움. 이때 잰 시간(가운데 15초)은 동시 실행 탓이라 버리고, 한 건씩 다시 쟀다.
-- Cloudflare 대시보드가 비밀번호 로그인을 요구해(OAuth 「not logged in」) **배포 · 미리보기 워커는 못 함** → 코드만 main 에, 배포는 대표 확인 뒤.
+- Cloudflare 대시보드가 비밀번호 로그인을 요구해(OAuth 「not logged in」) 처음엔 배포 · 미리보기 워커를 못 함 → 코드만 main 에 두고 대표 확인을 받음. 미리보기 워커 비교는 건너뛰고 로컬(진짜 Gemini) 비교로 대신했다.
 
 **남은 것 / 다음에 할 것**
 
-- [ ] 워커 배포(대표 「배포해」 + Cloudflare 로그인 필요) → `/api/health` 200 · 실서버 글 5건 · 사진 2건 · `timing.humanize` 값 확인
+- [x] 워커 배포 → `ceef27ce`, 실서버 글 5 · 사진 3 확인
+- [ ] 사진 번역 시간 1주 관찰(오늘 3번 5.8~12.0초, 예전 6.5~8.5) — 계속 느리면 사진에는 v3 절을 빼는 것 검토
 - [ ] 1주 뒤: 실제 대화로 `node tools\humanize\lint.mjs` 다시 재기(목표 100건당 20 아래) · 「바뀐 게 이상하다」 는 말 있으면 `promptVersion: "v2"` 로 같은 글 비교
 - [ ] cọc 용어(선금 · 계약금 · 보증금) 대표 결정 → 용어표에 한 줄(지금은 v3 가 「보증금」 으로 씀)
 - [ ] 영어 「please note that」 이 아직 39건 중 5건 — 원문 「참고로」 가 있을 때가 많아 그대로 둠. 줄일지 1주 뒤 판단
