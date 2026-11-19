@@ -96,7 +96,8 @@ npx wrangler deploy
 >
 > **휴대폰 캐처(전원 + 볼륨)를 카톡처럼 바로 붙이려면** (갤럭시): 삼성 키보드 「캐처 화면을 클립보드에 저장」 이 켜져 있으면
 > 캐처가 **키보드의 클립보드**에 들어간다(휴대폰 전체 클립보드가 아님). 카톡은 키보드가 사진을 직접 넣어 주는 길로 받고, 크롬은 그 길이 기본으로 닫혀 있다.
-> 크롬 주소창에 `chrome://flags/#enable-android-media-insertion` → **Enabled** → 아래 **Relaunch** → 앱에서 입력칸을 누르고
+> 크롬 주소창에 `chrome://flags/#enable-android-media-insertion`(앱 설정 → 「주소 복사」) → 「Enable IME media insertion」 **Enabled** → 아래 **Relaunch** → 앱에서 입력칸을 누르고
+> (크롬 157 은 이 항목이 만료돼 숨어 있다 → 먼저 맨 위 「Temporarily unexpire M155 flags」 Enabled → Relaunch. 크롬 최신 개발판은 만료를 180 으로 늘려 두었다)
 > 키보드 클립보드(또는 제안 줄)의 캐처를 누르면 첨부된다. 실험 설정이라 크롬을 업데이트하면 꺼질 수 있다(그러면 다시 켬다).
 
 한 번에 4장까지 보낼 수 있고, 여러 장을 보내면 순서대로 이어진 한 문서로 취급합니다.

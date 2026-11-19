@@ -802,3 +802,23 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 **다음에 할 것**
 
 - [ ] 대표님 갤럭시: 앱 → 톱니바퀴(설정) → 맨 아래 「주소 복사」 → 크롬 주소창 길게 눌러 붙여넣기 → Enabled → Relaunch → 입력칸에서 키보드 클립보드 캡처 누르기
+
+### 20 · 11-19 21:52 — 크롬 157 에선 그 설정이 「만료돼 숨어 있음」 → 맨 위 「Temporarily unexpire M155 flags」 먼저
+
+대표(휴대폰 화면 첨부, 크롬 **157.0.8103.78**): 「동일하게 항목이 너무 많이 나와.」 — 주소를 붙여 넣어도 해당 칸으로 안 가고 목록 맨 위(Temporarily unexpire M155 / M156 flags …)가 보였다.
+
+**원인 (크롬 소스 157.0.8103.78 태그로 확인)**
+
+- `chrome/browser/flag-metadata.json`: `enable-android-media-insertion` 의 `expiry_milestone` = **155** → 157 에서는 만료돼 목록에서 숨는다(주소 `#…` 가 갈 곳이 없어 맨 위가 보임).
+- `chrome/browser/unexpire_flags.cc` `IsFlagExpired`: `temporary-unexpire-flags-m155` 가 켜져 있으면 만료 숫자 155 인 설정이 다시 살아난다. 157 은 M155 · M156 을 살리는 칸을 맨 위에 둔다(대표님 화면 그대로).
+- 기능 자체(`kAndroidMediaInsertion`)는 157 에도 코드에 있고 기본 꺼짐. 보이는 이름은 「Enable IME media insertion」(`flag_descriptions.h`).
+- 크롬 최신 개발판(main)은 만료를 **180** 으로 늘려 두었다 → 다음 크롬부터는 숨김 없이 보일 것으로 보임(언제 판부터인지는 확인 안 함).
+
+**한 일**: 앱 설정 「휴대폰 캡처 바로 붙이기」 순서에 한 줄 추가 — 「노란 칸 Enable IME media insertion 이 안 보이면(크롬 157): 맨 위 Temporarily unexpire M155 flags 를 Enabled → Relaunch. 다시 켜지면 노란 칸이 보인다」. README 같은 내용.
+
+**대표님 휴대폰 순서 (지금 화면에서)**: ① 맨 위 「Temporarily unexpire M155 flags」 Default → Enabled → Relaunch ② 크롬이 같은 주소로 다시 열리면 노란 칸 「Enable IME media insertion」 → Enabled → Relaunch ③ 앱 입력칸 → 삼성 키보드 클립보드의 캡처.
+
+**다음에 할 것**
+
+- [ ] 대표님 확인: 노란 칸이 보이는지 · 캡처가 입력칸으로 들어오는지
+- [ ] 크롬 158 로 오르면 「M155 살리기」 칸이 없어진다 → 그때 노란 칸이 바로 보이는지(만료 180) 확인
