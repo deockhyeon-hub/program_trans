@@ -13,7 +13,7 @@ import {
 const $ = (id) => document.getElementById(id);
 
 // 화면 판(설정 맨 아래에 보인다). 배포할 때 고친다 — 직원 기기가 새 판인지 확인하는 용도.
-const APP_BUILD = "11-19 22:35";
+const APP_BUILD = "11-19 22:40";
 
 let auth = api.loadAuth();          // { token, user, expiresAt }
 let state = null;                    // 로그인 후 채워진다
