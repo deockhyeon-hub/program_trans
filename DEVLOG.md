@@ -825,3 +825,6 @@ Worker(`biz-translator-api`) + D1(`biz-translator-db`) 을 만들고 API 키를 
 - 11-19 21:58 대표 「그래도 안 보여. 노란칸」 — M155 살리기 뒤에도 노란 칸 안 보임.
   - 크롬 규칙 다시 확인(157 태그 `tools/flags/generate_unexpire_flags.py`): 157 은 만료 155 · 156 을 살릴 수 있다 → 「M155」(첫 칸, M156 아님)를 켜고 Relaunch 했으면 목록에는 돌아와 있어야 한다. 노란 표시는 주소 `#` 로 들어왔을 때만 생기므로, 위 검색칸에 `insertion` 으로 찾게 안내.
   - 설정 없이 되는 길 다시 확인: 실서버 앱에서 `share-target` 으로 사진 POST → 서비스워커가 맡김(`shared/…` 1장 + meta) · 303 이동 → 「캡처 후 도구 막대의 공유 → Biz 번역」 은 지금도 동작(시험으로 맡긴 것은 지움). 단 앱을 크롬 「앱 설치」로 설치해야 공유 목록에 나온다.
+- **11-19 22:00 대표 갤럭시에서 성공** 「오오 됐어」: 크롬 157.0.8103.78 · 「Temporarily unexpire M155 flags」 Enabled + 「Enable IME media insertion」 Enabled → Relaunch → 앱 다시 열기 → 입력칸에서 삼성 키보드 클립보드의 캡처를 누르니 첨부됨.
+  → 17번의 안드로이드 입력칸(`-webkit-user-modify: read-write`) + 크롬 설정 조합이 실제로 동작함을 확인. 다른 직원 휴대폰도 같은 순서(앱 설정 → 「주소 복사」).
+  - [ ] 크롬 158 으로 오르면 M155 살리기 칸이 사라진다 → 그때도 「Enable IME media insertion」 이 켜진 채로 남는지 확인(최신판은 만료 180)
