@@ -12,6 +12,9 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
+// 화면 판(설정 맨 아래에 보인다). 배포할 때 고친다 — 직원 기기가 새 판인지 확인하는 용도.
+const APP_BUILD = "11-19 22:35";
+
 let auth = api.loadAuth();          // { token, user, expiresAt }
 let state = null;                    // 로그인 후 채워진다
 let settings = loadSettings();
@@ -1009,6 +1012,7 @@ function openSettings() {
   $("set-f-theme").value = settings.theme || "auto";
   $("set-f-size").value = settings.textSize === "l" || settings.textSize === "xl" ? "l" : "m";
   if ($("set-f-ui")) $("set-f-ui").value = oneMode() ? "one" : "rooms";
+  if ($("set-build")) $("set-build").textContent = `화면 판 ${APP_BUILD}`;
   $("set-account-email").textContent = auth?.user?.email ?? "";
   $("set-account-role").textContent = auth?.user?.role === "admin" ? "관리자" : "직원";
   $("set-admin").hidden = auth?.user?.role !== "admin";
@@ -1457,7 +1461,17 @@ function init() {
   setAuthMode("login");
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(() => { /* 오프라인 캐시 없이도 동작 */ });
+    // 새 서비스워커가 자리를 잡으면(배포 직후) 한 번 새로 연다 → 앱을 두 번 다시 열지 않아도 새 판.
+    // 입력 중이거나 번역 중이면 기다리지 않고 건너뛴다(다음 열기에 바뀜).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloadedForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      const busy = el.input.value.trim() || attachments.length || document.querySelector("#messages .tr-msg.pending");
+      if (!hadController || reloadedForUpdate || busy) return;
+      reloadedForUpdate = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => { /* 오프라인 캐시 없이도 동작 */ });
   }
 
   if (auth?.token) startApp();

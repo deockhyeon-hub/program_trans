@@ -32,7 +32,7 @@ async function receiveShare(request) {
 }
 
 const { registerRoute } = workbox.routing;
-const { NetworkFirst, StaleWhileRevalidate, CacheFirst } = workbox.strategies;
+const { NetworkFirst, CacheFirst } = workbox.strategies;
 const { ExpirationPlugin } = workbox.expiration;
 const sameOrigin = ({ url }) => url.origin === self.location.origin;
 
@@ -46,9 +46,11 @@ registerRoute(
   ({ request, url }) => request.mode === "navigate" && url.origin === self.location.origin,
   new NetworkFirst({ cacheName: "biztr-html", networkTimeoutSeconds: 3, plugins: [stripSearch] }),
 );
+// CSS · JS 도 네트워크 먼저(3초 넘으면 캐시). 11-19: 예전 StaleWhileRevalidate 는 배포 뒤 첫 번째 열기에서
+// 새 화면(HTML) + 옛 JS 를 보여 줘서 「다시 열어야 바뀜」 이 생겼다(대표: 「아직 안 나오는데 채팅 방식이」).
 registerRoute(
   (c) => sameOrigin(c) && ["style", "script", "manifest"].includes(c.request.destination),
-  new StaleWhileRevalidate({ cacheName: "biztr-static" }),
+  new NetworkFirst({ cacheName: "biztr-static", networkTimeoutSeconds: 3 }),
 );
 registerRoute(
   (c) => sameOrigin(c) && (["image", "font"].includes(c.request.destination) || c.url.pathname.endsWith(".woff2")),

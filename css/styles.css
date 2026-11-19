@@ -236,6 +236,7 @@ textarea.ds-input{min-height:0;resize:vertical}
 .tr-langbtn__code{padding:1px 5px;border-radius:4px;font-size:11px;font-weight:var(--ds-fw-bold);letter-spacing:.04em;line-height:1.4;
   background:color-mix(in srgb,currentColor 14%,transparent)}
 .tr-langbtn__key{padding:1px 4px;border:1px solid color-mix(in srgb,currentColor 45%,transparent);border-radius:4px;font:var(--ds-fw-semibold) 10px/1.3 var(--ds-font);opacity:.85}
+.tr-build{margin-right:auto;font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle);white-space:nowrap}
 .tr-room__sec{list-style:none;padding:var(--ds-sp-3) 10px var(--ds-sp-1);font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle)}
 .tr-room.cfg .tr-room__last{font-size:var(--ds-fs-12)}
 .tr-composer__hint{margin:0;font-size:var(--ds-fs-12);color:var(--ds-fg-neutral-subtle)}
