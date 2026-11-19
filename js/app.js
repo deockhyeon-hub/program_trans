@@ -28,7 +28,7 @@ const el = {
   messages: $("messages"), input: $("input"), send: $("btn-send"),
   attachments: $("attachments"), fileImage: $("file-image"), dropzone: $("dropzone"),
   dlgRoom: $("dlg-room"), dlgSettings: $("dlg-settings"), dlgImage: $("dlg-image"),
-  toast: $("toast"), chat: $("chat"), clipOffer: $("clip-offer"), clipOfferImg: $("clip-offer-img"),
+  toast: $("toast"), chat: $("chat"), clipOffer: $("clip-offer"), clipOfferImg: $("clip-offer-img"), clipAsk: $("clip-ask"),
 };
 
 const liveRooms = () => state.rooms.filter((r) => !r.deleted);
@@ -637,16 +637,73 @@ async function pasteFromClipboard() {
   }
 }
 
+// 클립보드 읽기 허락 상태: "granted" | "prompt" | "denied" | ""(알 수 없음: 아이폰 사파리 · 파이어폭스)
+let clipPermWatched = false;
+const CLIP_ASK_OFF = "biztr.clipAsk.off";
+async function clipPermission() {
+  if (!navigator.clipboard?.read || !navigator.permissions?.query) return "";
+  try {
+    const perm = await navigator.permissions.query({ name: "clipboard-read" });
+    if (!clipPermWatched) {
+      clipPermWatched = true;
+      perm.onchange = () => { updateClipAsk(); checkClipboardOffer(); };
+    }
+    return perm.state;
+  } catch {
+    return "";
+  }
+}
+
+// 「복사한 사진 바로 보기 켜기」 안내 (2026-11-19, 대표: 「모바일은 자동으로 미리보기 → 누르면 삽입」).
+// 미리보기는 클립보드 읽기 허락이 있어야 뜨는데, 허락을 묻는 창은 사람이 무언가를 눌렀을 때만 뜬다.
+// 10-23 부터 「붙여넣기 단추를 한 번 누르면」 켜지게 해 두었지만 아무도 모르고 지났다(이 PC 도 prompt 그대로였음).
+// → 허락이 아직이면 입력칸 위에 켜기 안내를 한 줄 띄운다. 닫으면 다시 안 뛴다. 아이폰은 허락 상태를 알 수 없어 안 띄운다.
+async function updateClipAsk() {
+  if (!el.clipAsk) return; // 옛 화면(HTML)이 캐시에서 열린 경우
+  const state = await clipPermission();
+  const show = state === "prompt" && !localStorage.getItem(CLIP_ASK_OFF) && !el.app.hidden;
+  el.clipAsk.hidden = !show || !el.clipOffer.hidden;
+}
+
+async function enableClipPreview() {
+  if (el.clipAsk) el.clipAsk.hidden = true;
+  let files = null;
+  try {
+    files = (await readClipboard())?.files || null; // 여기서 브라우저가 「클립보드 허용?」 을 묻는다
+  } catch {
+    /* 거절 또는 닫음 */
+  }
+  const state = await clipPermission();
+  if (state === "granted") {
+    toast("켜졌습니다. 이제 캐처 · 복사하고 돌아오면 사진 미리보기가 뜹니다.");
+    if (files?.length) { clipCheckedAt = 0; checkClipboardOffer(); }
+    return;
+  }
+  if (state === "denied") {
+    localStorage.setItem(CLIP_ASK_OFF, "1");
+    toast(desktopPointer.matches
+      ? "허용하지 않아 꺼져 있습니다. 주소창 왼쪽 아이콘 → 사이트 설정 → 클립보드 → 허용으로 다시 켤 수 있습니다."
+      : "허용하지 않아 꺼져 있습니다. 크롬 ⋮ → 설정 → 사이트 설정 → 클립보드에서 다시 켤 수 있습니다.");
+    return;
+  }
+  updateClipAsk(); // 창을 그냥 닫았으면 안내를 다시 보인다
+}
+
+// 앱으로 돌아온 직후에는 창이 아직 포커스를 못 받아 클립보드를 못 읽을 때가 있다(휴대폰) → 여러 번 본다.
+function checkClipboardSoon() {
+  for (const ms of [250, 900, 2200]) setTimeout(checkClipboardOffer, ms);
+}
+
 // 읽기 허락이 이미 있을 때만 살짝 들여다본다(처음부터 허락 창을 띄우지 않는다).
 async function checkClipboardOffer() {
   if (!navigator.clipboard?.read || !navigator.permissions?.query) return;
-  if (el.app.hidden || clipChecking || Date.now() - clipCheckedAt < 1200) return;
+  if (el.app.hidden || clipChecking || Date.now() - clipCheckedAt < 500) return;
   if (!document.hasFocus() || document.querySelector("dialog[open]")) return;
   clipChecking = true;
   clipCheckedAt = Date.now();
   try {
-    const perm = await navigator.permissions.query({ name: "clipboard-read" }).catch(() => null);
-    if (!perm || perm.state !== "granted") return;
+    const perm = await clipPermission();
+    if (perm !== "granted") return;
     const files = await readClipboardImages();
     const file = files?.[0];
     if (!file) {
@@ -662,6 +719,7 @@ async function checkClipboardOffer() {
     offer = { file, sig, url: URL.createObjectURL(file) };
     el.clipOfferImg.src = offer.url;
     el.clipOffer.hidden = false;
+    if (el.clipAsk) el.clipAsk.hidden = true;
   } catch {
     /* 클립보드를 못 읽으면 알약만 안 띄운다 */
   } finally {
@@ -1003,9 +1061,9 @@ function bindEvents() {
     if (document.activeElement !== el.input) focusInputOnDesktop();
   });
 
-  // 붙여넣기 단추 · 복사한 이미지 알약
-  $("btn-paste").addEventListener("click", pasteFromClipboard);
-  el.clipOffer.addEventListener("click", () => {
+  // 붙여넣기 단추 · 복사한 사진 미리보기 · 바로 보기 켜기 안내
+  $("btn-paste").addEventListener("click", async () => { await pasteFromClipboard(); updateClipAsk(); });
+  ($("clip-offer-btn") || el.clipOffer).addEventListener("click", () => {
     if (!offer) return;
     const { file, sig } = offer;
     lastClipSig = sig;
@@ -1013,6 +1071,22 @@ function bindEvents() {
     addImageFiles([file]);
     focusInputOnDesktop();
   });
+  $("clip-offer-x")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (offer) lastClipSig = offer.sig; // 같은 사진은 다시 권하지 않는다
+    hideClipOffer();
+  });
+  $("clip-ask-on")?.addEventListener("click", enableClipPreview);
+  $("clip-ask-x")?.addEventListener("click", () => {
+    localStorage.setItem(CLIP_ASK_OFF, "1");
+    el.clipAsk.hidden = true;
+    toast("나중에 켜려면 붙여넣기 단추를 한 번 눌러 「허용」하면 됩니다.");
+  });
+  // 안드로이드 크롬: 입력칸을 「사진도 받는 칸」으로 알린다(-webkit-user-modify: read-write).
+  // 그러면 입력칸을 길게 눌러 「붙여넣기」 했을 때 사진이 paste 이벤트로 온다. 크롬이 키보드 사진 넣기
+  // (chrome://flags/#enable-android-media-insertion)를 켜면 삼성 키보드의 클립보드 칩도 같은 길로 들어온다
+  // (깃허브 getpaseo/paseo#5474, 크롬 153 실측: 평범한 textarea 는 못 받고 이 스타일을 준 textarea 는 받음).
+  if (/Android/i.test(navigator.userAgent)) el.input.classList.add("tr-input--rich");
 
   // 대화창에 마우스를 올리면 바로 붙여넣을 수 있게
   let hoveringChat = false;
@@ -1021,13 +1095,14 @@ function bindEvents() {
   // 캡처하러 다른 창에 갔다가 돌아오면(창 포커스) 한 번 더
   window.addEventListener("focus", () => {
     if (hoveringChat) armPaste();
-    else checkClipboardOffer();
+    else checkClipboardSoon();
   });
   // 휴대폰: 카톡 · Zalo 에서 사진을 복사하고 앱으로 돌아오면(화면이 다시 보이면) · 입력칸을 누르면
-  // 「복사한 이미지 붙여넣기」 알약을 띄운다(읽기 허락을 한 번 받은 뒤. 안드로이드 크롬 · PC).
+  // 「복사한 사진 넣기」 미리보기를 띄운다(읽기 허락을 한 번 받은 뒤. 안드로이드 크롬 · PC).
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") setTimeout(checkClipboardOffer, 300);
+    if (document.visibilityState === "visible") { checkClipboardSoon(); updateClipAsk(); }
   });
+  window.addEventListener("pageshow", () => checkClipboardSoon());
   el.input.addEventListener("focus", () => checkClipboardOffer());
 
   window.addEventListener("dragenter", (e) => {
@@ -1114,6 +1189,8 @@ function startApp() {
   renderAll();
   autosize();
   takeSharedFiles();
+  updateClipAsk();
+  checkClipboardSoon();
   // 번역 중에 앱이 닫혔던 것은 첫 동기화 뒤 다시 보낸다.
   runSync({ silent: false }).then(() => retryInterrupted());
 }
