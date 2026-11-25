@@ -11,7 +11,7 @@
 
 - 이 저장소 개발은 Claude Code 세션이 총괄하고 Claude 와 Codex 가 같이 구현한다.
 - 일을 시작하기 전에 진행 중인 일이 있는지 본다. 인계 기록은 일하는 가지 맨 위 `HANDOFF.md` 에 있다(main 에는 없다):
-  `git fetch -q origin && for b in $(git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/remotes/origin | head -20); do git cat-file -e "$b:HANDOFF.md" 2>/dev/null && echo "$b"; done`
+  `git fetch -q origin; for b in $(git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/remotes/origin | head -20); do git cat-file -e "$b:HANDOFF.md" 2>/dev/null && echo "$b"; done`
   지금 받은 가지에 `HANDOFF.md` 가 있으면 그것이 이어받을 일이다. 남은 것을 위에서부터 한다.
 - 이어서 한 뒤에는 `HANDOFF.md` 를 고친다(마지막으로 확인한 커밋 · 한 것 · 남은 것 · 시험 결과 · 이어받은 기록 한 줄) → 같은 가지에 커밋 · push. push 를 못 하면 무엇이 로컬에만 있는지 답에 적는다.
 - 맡은 범위 밖 파일은 고치지 않는다. 남의 미커밋 변경은 그대로 둔다. 시험은 직접 돌리고 명령과 결과를 적는다.
